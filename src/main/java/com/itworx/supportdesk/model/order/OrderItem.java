@@ -1,6 +1,6 @@
 package com.itworx.supportdesk.model.order;
 
-import com.itworx.supportdesk.model.Product;
+import com.itworx.supportdesk.entity.Product;
 import com.itworx.supportdesk.model.User;
 import jakarta.persistence.*;
 import jakarta.persistence.FetchType;
