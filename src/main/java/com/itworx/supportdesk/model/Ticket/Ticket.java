@@ -27,6 +27,14 @@ public class Ticket {
     @Column(name = "ticket_number", nullable = false, unique = true, length = 30)
     private String ticketNumber;
 
+    @NotBlank
+    @Column(nullable = false, length = 200)
+    private String title;
+
+    @NotBlank
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String description;
+
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "customer_id", nullable = false)
