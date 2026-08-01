@@ -26,6 +26,16 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Duplicate SKU", ex.getMessage());
     }
 
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ProblemDetail handleResourceNotFound(ResourceNotFoundException ex) {
+        return problem(HttpStatus.NOT_FOUND, "Resource Not Found", ex.getMessage());
+    }
+
+    @ExceptionHandler(DuplicateResourceException.class)
+    public ProblemDetail handleDuplicateResource(DuplicateResourceException ex) {
+        return problem(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
+    }
+
     @ExceptionHandler(InvalidProductStateException.class)
     public ProblemDetail handleInvalidState(InvalidProductStateException ex) {
         return problem(HttpStatus.BAD_REQUEST, "Invalid Request", ex.getMessage());
