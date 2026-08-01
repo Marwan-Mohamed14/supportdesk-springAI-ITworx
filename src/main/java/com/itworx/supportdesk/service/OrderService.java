@@ -4,6 +4,7 @@ import com.itworx.supportdesk.dto.order.CreateOrderItemRequest;
 import com.itworx.supportdesk.dto.order.CreateOrderRequest;
 import com.itworx.supportdesk.dto.order.OrderItemResponse;
 import com.itworx.supportdesk.dto.order.OrderResponse;
+import com.itworx.supportdesk.dto.order.UpdateOrderStatusRequest;
 import com.itworx.supportdesk.entity.Product;
 import com.itworx.supportdesk.exception.CustomerNotFoundException;
 import com.itworx.supportdesk.exception.InsufficientStockException;
@@ -12,6 +13,7 @@ import com.itworx.supportdesk.exception.ProductNotFoundException;
 import com.itworx.supportdesk.model.OrderItem;
 import com.itworx.supportdesk.model.User;
 import com.itworx.supportdesk.model.order.Order;
+import com.itworx.supportdesk.model.order.OrderStatus;
 import com.itworx.supportdesk.repository.OrderRepository;
 import com.itworx.supportdesk.repository.ProductRepository;
 import com.itworx.supportdesk.repository.UserRepository;
@@ -79,6 +81,32 @@ public class OrderService {
         return mapToOrderResponse(saved);
     }
 
+    @Transactional
+    public OrderResponse updateOrderStatus(UUID id, UpdateOrderStatusRequest request) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Order not found with id: " + id));
+
+        OrderStatus currentStatus = order.getStatus();
+        OrderStatus newStatus = request.status();
+
+        if (!isValidTransition(currentStatus, newStatus)) {
+            throw new IllegalArgumentException("Invalid status transition from " + currentStatus + " to " + newStatus);
+        }
+
+        order.setStatus(newStatus);
+        Order updatedOrder = orderRepository.save(order);
+        return mapToOrderResponse(updatedOrder);
+    }
+
+    private boolean isValidTransition(OrderStatus current, OrderStatus next) {
+        return switch (current) {
+            case PLACED -> next == OrderStatus.PAID;
+            case PAID -> next == OrderStatus.SHIPPED;
+            case SHIPPED -> next == OrderStatus.DELIVERED;
+            default -> false;
+        };
+    }
+
     private String generateOrderNumber() {
         String candidate;
         do {
@@ -88,12 +116,10 @@ public class OrderService {
     }
 
     private OrderResponse mapToOrderResponse(Order order) {
-        // If order.getItems() gives an error, check your Order model for the exact getter name (e.g., getOrderItems())
         List<OrderItemResponse> itemResponses = order.getItems().stream()
                 .map(this::mapToOrderItemResponse)
                 .toList();
 
-        // Convert Instant to LocalDateTime if order.getCreatedAt() returns an Instant
         LocalDateTime orderDate = order.getCreatedAt() != null
                 ? LocalDateTime.ofInstant(order.getCreatedAt(), ZoneId.systemDefault())
                 : null;
