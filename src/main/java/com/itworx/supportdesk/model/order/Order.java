@@ -1,5 +1,6 @@
 package com.itworx.supportdesk.model.order;
 
+import com.itworx.supportdesk.model.OrderItem;
 import com.itworx.supportdesk.model.User;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
