@@ -1,5 +1,6 @@
-package com.itworx.supportdesk.model;
+package com.itworx.supportdesk.entity;
 
+import com.itworx.supportdesk.model.User;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
