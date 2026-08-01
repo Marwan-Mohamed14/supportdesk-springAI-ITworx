@@ -60,6 +60,17 @@ public class Ticket {
     @Column(length = 10)
     private TicketPriority priority;
 
+
+
+
+    @Column(name = "escalation_reason", length = 1000)
+    private String escalationReason;
+
+    @Column(name = "escalated_at")
+    private Instant escalatedAt;
+
+
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private User createdBy;
