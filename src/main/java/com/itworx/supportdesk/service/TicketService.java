@@ -5,6 +5,7 @@ import com.itworx.supportdesk.dto.TicketResponse;
 import com.itworx.supportdesk.model.Ticket.Ticket;
 import com.itworx.supportdesk.model.Ticket.TicketNumberGenerator;
 import com.itworx.supportdesk.model.Ticket.TicketPriority;
+import com.itworx.supportdesk.model.Ticket.TicketStatus;
 import com.itworx.supportdesk.model.User;
 import com.itworx.supportdesk.model.order.Order;
 import com.itworx.supportdesk.repository.OrderRepository;
@@ -12,8 +13,11 @@ import com.itworx.supportdesk.repository.TicketRepository;
 import com.itworx.supportdesk.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -27,15 +31,10 @@ public class TicketService {
 
     @Autowired
     OrderRepository orderRepository;
-    /*
-    As an agent, I want to open a ticket for a customer issue, so that it can be tracked to resolution.
-     - Given a valid ticket payload, when I POST /
-    api/tickets , then it is created with a unique ticketNumber and status OPEN
-     . - Given an optional orderId , then the ticket is linked to
-    that order. - Priority: MUST · Milestone: M1
-     */
 
     public TicketResponse createTicket(CreateTicketRequest request) {
+        System.out.println("Received customerId: [" + request.getCustomerId() + "]");
+
         User customer = userRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new EntityNotFoundException("Customer not found"));
 
@@ -57,7 +56,20 @@ public class TicketService {
         ticket.setTitle(title);
         ticket.setDescription(description);
         ticketRepository.save(ticket);
-        return new TicketResponse(
-                request.getCustomerId(), title, description, priority, ticketNumber, request.getOrderId());
+        return new TicketResponse(ticket);
+    }
+
+    public Page<TicketResponse> ListAndFilter(TicketStatus status, TicketPriority priority, Pageable pageable) {
+        Page<Ticket> tickets;
+        if (status != null && priority != null) {
+            tickets = ticketRepository.findByStatusAndPriority(status, priority, pageable);
+        } else if (status != null) {
+            tickets = ticketRepository.findByStatus(status, pageable);
+        } else if (priority != null) {
+            tickets = ticketRepository.findByPriority(priority, pageable);
+        } else {
+            tickets = ticketRepository.findAll(pageable);
+        }
+        return tickets.map(TicketResponse::new);
     }
 }
