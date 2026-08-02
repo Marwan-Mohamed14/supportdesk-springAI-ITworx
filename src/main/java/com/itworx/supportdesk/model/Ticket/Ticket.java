@@ -7,7 +7,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UuidGenerator;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -20,12 +22,21 @@ public class Ticket {
 
     @Id
     @UuidGenerator
+    @JdbcTypeCode(SqlTypes.CHAR)
     @Column(columnDefinition = "CHAR(36)", updatable = false, nullable = false)
     private UUID id;
 
     @NotBlank
     @Column(name = "ticket_number", nullable = false, unique = true, length = 30)
     private String ticketNumber;
+
+    @NotBlank
+    @Column(nullable = false, length = 200)
+    private String title;
+
+    @NotBlank
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String description;
 
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

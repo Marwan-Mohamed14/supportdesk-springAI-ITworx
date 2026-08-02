@@ -7,14 +7,16 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.Check;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UuidGenerator;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Setter
-@Getter
+@Setter()
+@Getter()
 @Entity
 @Table(name = "order_items")
 @Check(constraints = "quantity > 0 AND unit_price >= 0")
@@ -22,6 +24,7 @@ public class OrderItem {
 
     @Id
     @UuidGenerator
+    @JdbcTypeCode(SqlTypes.CHAR)
     @Column(columnDefinition = "CHAR(36)", updatable = false, nullable = false)
     private UUID id;
 

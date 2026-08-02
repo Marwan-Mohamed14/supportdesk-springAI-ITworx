@@ -69,6 +69,7 @@
             <version>13.0</version>
             <scope>compile</scope>
         </dependency>
+
     </dependencies>
 
 	<build>
@@ -120,7 +121,11 @@
 						</configuration>
 					</execution>
 				</executions>
-			</plugin>
+                <configuration>
+                    <source>25</source>
+                    <target>25</target>
+                </configuration>
+            </plugin>
 		</plugins>
 	</build>
 

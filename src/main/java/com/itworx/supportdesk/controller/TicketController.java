@@ -2,44 +2,57 @@ package com.itworx.supportdesk.controller;
 
 import com.itworx.supportdesk.dto.ticket.AssignTicketRequest;
 import com.itworx.supportdesk.dto.ticket.EscalateTicketRequest;
-import com.itworx.supportdesk.dto.ticket.TicketResponse;
 import com.itworx.supportdesk.model.Ticket.Ticket;
+import com.itworx.supportdesk.dto.CreateTicketRequest;
+import com.itworx.supportdesk.dto.TicketResponse;
+import com.itworx.supportdesk.model.Ticket.TicketPriority;
+import com.itworx.supportdesk.model.Ticket.TicketStatus;
 import com.itworx.supportdesk.service.TicketService;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
+import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/tickets")
+@RequestMapping("/tickets")
 public class TicketController {
+    @Autowired
+    TicketService ticketService;
 
-    private final TicketService ticketService;
+    @PostMapping("/create")
+    public ResponseEntity<?> createTicket(@Valid @RequestBody CreateTicketRequest request) {
+        TicketResponse ticketResponse = ticketService.createTicket(request);
+        return ResponseEntity.status(201).body(ticketResponse);
 
-    public TicketController(TicketService ticketService) {
-        this.ticketService = ticketService;
     }
 
+    @GetMapping
+    public Page<TicketResponse> ListTickets(
+            @RequestParam(required = false) TicketPriority priority,
+            @RequestParam(required = false) TicketStatus status,
+            Pageable pageable) {
+        return ticketService.ListAndFilter(status, priority, pageable);
+    }
     @PostMapping("/{id}/assign")
-    public ResponseEntity<TicketResponse> assignTicket(
+    public ResponseEntity<com.itworx.supportdesk.dto.ticket.TicketResponse> assignTicket(
             @PathVariable("id") UUID id,
             @Valid @RequestBody AssignTicketRequest request) {
 
         Ticket ticket = ticketService.assignTicket(id, request.agentId());
-        return ResponseEntity.ok(TicketResponse.from(ticket));
+        return ResponseEntity.ok(com.itworx.supportdesk.dto.ticket.TicketResponse.from(ticket));
     }
 
     @PostMapping("/{id}/escalate")
-    public ResponseEntity<TicketResponse> escalateTicket(
+    public ResponseEntity<com.itworx.supportdesk.dto.ticket.TicketResponse> escalateTicket(
             @PathVariable("id") UUID id,
             @Valid @RequestBody EscalateTicketRequest request) {
 
         Ticket ticket = ticketService.escalateTicket(id, request.reason());
-        return ResponseEntity.ok(TicketResponse.from(ticket));
+        return ResponseEntity.ok(com.itworx.supportdesk.dto.ticket.TicketResponse.from(ticket));
     }
+}
+
 }
