@@ -1,7 +1,9 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft, MapPin, Package, Receipt, Truck } from "lucide-react";
 import { OrderStatusBadge } from "@/components/orders/OrderStatusBadge";
+import { ReorderButton } from "@/components/orders/ReorderButton";
 import { getOrder, type OrderDetail } from "@/data/orders";
+import { useReorders } from "@/lib/reorder-store";
 
 export const Route = createFileRoute("/orders/$orderId")({
   loader: ({ params }): { order: OrderDetail } => {
@@ -53,6 +55,7 @@ function OrderNotFound() {
 
 function OrderDetailPage() {
   const { order } = Route.useLoaderData() as { order: OrderDetail };
+  const reorder = useReorders()[order.id];
 
   return (
     <main className="min-h-screen bg-background">
@@ -79,11 +82,16 @@ function OrderDetailPage() {
             <button className="rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-panel-hi hover:text-foreground">
               Download invoice
             </button>
-            <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-brand-red-dark">
-              Reorder
-            </button>
+            <ReorderButton orderId={order.id} />
           </div>
         </header>
+
+        {reorder && (
+          <div className="mt-6 rounded-xl border border-success/40 bg-success/10 p-4 text-sm text-success">
+            This order was reordered on {reorder.placedAt} — new order {reorder.newId} is now being
+            processed.
+          </div>
+        )}
 
         <section className="mt-8 grid gap-4 sm:grid-cols-3">
           {[
