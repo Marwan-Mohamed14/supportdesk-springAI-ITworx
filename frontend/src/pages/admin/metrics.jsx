@@ -2,7 +2,7 @@ import React, { Fragment } from "react";
 import {
   COLORS, FONT, Icon, DemoLoginPanel, AdminPageHeader, useAdminAuth, useToasts, Toasts,
   StatChip, StatDivider, AdminOnlyGate,
-} from "../admin-shared.jsx";
+} from "./admin-shared.jsx";
 
 /* ============================================================
    Epic L — Operational Metrics

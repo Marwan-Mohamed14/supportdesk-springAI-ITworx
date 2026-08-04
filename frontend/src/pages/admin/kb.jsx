@@ -2,7 +2,7 @@ import React, { useState, useMemo, Fragment } from "react";
 import {
   COLORS, FONT, Icon, DemoLoginPanel, AdminPageHeader, useAdminAuth, useToasts, Toasts,
   Modal, fieldLabel, inputStyle, StatChip, StatDivider, AdminOnlyGate,
-} from "../admin-shared.jsx";
+} from "./admin-shared.jsx";
 
 /* ============================================================
    Epic F — Knowledge Base (author + ingest)

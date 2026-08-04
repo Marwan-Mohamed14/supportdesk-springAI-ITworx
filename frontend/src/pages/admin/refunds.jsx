@@ -2,7 +2,7 @@ import React, { useState, useMemo, Fragment } from "react";
 import {
   COLORS, FONT, Icon, DemoLoginPanel, AdminPageHeader, useAdminAuth, useToasts, Toasts,
   Modal, fieldLabel, inputStyle, StatChip, StatDivider, AdminOnlyGate, money,
-} from "../admin-shared.jsx";
+} from "./admin-shared.jsx";
 
 /* ============================================================
    Epic H — Refund Approvals (human-in-the-loop, over-limit guard)

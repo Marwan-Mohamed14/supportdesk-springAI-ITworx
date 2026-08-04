@@ -2,7 +2,7 @@ import React, { useState, useMemo, Fragment } from "react";
 import {
   COLORS, FONT, Icon, DemoLoginPanel, AdminPageHeader, useAdminAuth, useToasts, Toasts,
   fieldLabel, inputStyle, StatChip, StatDivider, AdminOnlyGate,
-} from "../admin-shared.jsx";
+} from "./admin-shared.jsx";
 
 /* ============================================================
    Epic K — Audit Trail
