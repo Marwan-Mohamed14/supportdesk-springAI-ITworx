@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { OrderCard, type Order } from "@/components/orders/OrderCard";
+import { OrderCard } from "@/components/orders/OrderCard";
+import { ORDERS } from "@/data/orders";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,54 +23,6 @@ export const Route = createFileRoute("/")({
   }),
   component: PreviousOrders,
 });
-
-const ORDERS: Order[] = [
-  {
-    id: "ORD-24817",
-    date: "12 Jul 2026",
-    items: "Dell Latitude 5550 · Docking Station WD22TB4",
-    units: 4,
-    total: "$6,480.00",
-    status: "delivered",
-    requester: "Nour Adel",
-  },
-  {
-    id: "ORD-24796",
-    date: "04 Jul 2026",
-    items: "Microsoft 365 E3 licences (annual renewal)",
-    units: 25,
-    total: "$10,950.00",
-    status: "processing",
-    requester: "Karim Fahmy",
-  },
-  {
-    id: "ORD-24755",
-    date: "22 Jun 2026",
-    items: "Logitech MX Master 3S · Keyboard MX Keys",
-    units: 12,
-    total: "$1,740.00",
-    status: "shipped",
-    requester: "Salma Hassan",
-  },
-  {
-    id: "ORD-24710",
-    date: "09 Jun 2026",
-    items: "Jabra Evolve2 65 Headsets",
-    units: 8,
-    total: "$1,992.00",
-    status: "delivered",
-    requester: "Omar Zaki",
-  },
-  {
-    id: "ORD-24688",
-    date: "28 May 2026",
-    items: "Ubiquiti UniFi 6 Pro Access Points",
-    units: 6,
-    total: "$1,134.00",
-    status: "cancelled",
-    requester: "Mariam Sobhy",
-  },
-];
 
 const FILTERS = ["All", "Delivered", "Shipped", "Processing", "Cancelled"] as const;
 
