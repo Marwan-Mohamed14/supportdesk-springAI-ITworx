@@ -1,8 +1,11 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft, MapPin, Package, Receipt, Truck } from "lucide-react";
+import { ArrowLeft, Download, MapPin, Package, Receipt, Truck } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { OrderStatusBadge } from "@/components/orders/OrderStatusBadge";
 import { ReorderButton } from "@/components/orders/ReorderButton";
 import { getOrder, type OrderDetail } from "@/data/orders";
+import { downloadInvoice } from "@/lib/invoice";
 import { useReorders } from "@/lib/reorder-store";
 
 export const Route = createFileRoute("/orders/$orderId")({
@@ -56,6 +59,7 @@ function OrderNotFound() {
 function OrderDetailPage() {
   const { order } = Route.useLoaderData() as { order: OrderDetail };
   const reorder = useReorders()[order.id];
+  const [downloading, setDownloading] = useState(false);
 
   return (
     <main className="min-h-screen bg-background">
@@ -79,9 +83,25 @@ function OrderDetailPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button className="rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-panel-hi hover:text-foreground">
-              Download invoice
+            <button
+              onClick={async () => {
+                setDownloading(true);
+                try {
+                  await downloadInvoice(order);
+                  toast.success(`Invoice for ${order.id} downloaded`);
+                } catch {
+                  toast.error("Could not generate the invoice. Please try again.");
+                } finally {
+                  setDownloading(false);
+                }
+              }}
+              disabled={downloading}
+              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-panel-hi hover:text-foreground disabled:opacity-60"
+            >
+              <Download className="size-4" />
+              {downloading ? "Preparing…" : "Download invoice"}
             </button>
+
             <ReorderButton orderId={order.id} />
           </div>
         </header>
