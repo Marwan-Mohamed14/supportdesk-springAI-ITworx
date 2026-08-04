@@ -1,10 +1,10 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft, MapPin, Package, Receipt, Truck } from "lucide-react";
 import { OrderStatusBadge } from "@/components/orders/OrderStatusBadge";
-import { getOrder } from "@/data/orders";
+import { getOrder, type OrderDetail } from "@/data/orders";
 
 export const Route = createFileRoute("/orders/$orderId")({
-  loader: ({ params }) => {
+  loader: ({ params }): { order: OrderDetail } => {
     const order = getOrder(params.orderId);
     if (!order) throw notFound();
     return { order };
@@ -52,7 +52,7 @@ function OrderNotFound() {
 }
 
 function OrderDetailPage() {
-  const { order } = Route.useLoaderData();
+  const { order } = Route.useLoaderData() as { order: OrderDetail };
 
   return (
     <main className="min-h-screen bg-background">
