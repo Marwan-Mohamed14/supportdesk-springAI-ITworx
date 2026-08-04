@@ -28,7 +28,15 @@ const LeftPanel = styled.div`
 const LogoBlock = styled.div`
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 10px;
+  margin-left: -10px;
+`;
+
+const LogoImage = styled.img`
+  display: block;
+  height: 44px;
+  width: auto;
 `;
 
 const LogoUnderline = styled.div`
@@ -126,7 +134,7 @@ function AuthLayout({ children }) {
     <Screen>
       <LeftPanel>
         <LogoBlock>
-          <img src={logo} alt="ITWORX" height={40} />
+          <LogoImage src={logo} alt="ITWORX" />
           <LogoUnderline>
             <span />
             <span />

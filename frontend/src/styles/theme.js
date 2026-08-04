@@ -1,5 +1,4 @@
-// Sampled from the auth.png concept. Swap these once the real ITWORX brand
-// manual hex values are confirmed — every component reads colors from here only.
+// mark/accent sampled directly from the real ITWORX logo asset (src/assets/logo.png).
 const theme = {
   colors: {
     panelDark: '#12121c',
@@ -8,7 +7,7 @@ const theme = {
     cardBorder: '#e5e7eb',
     accent: '#4b2fd6',
     accentHover: '#3f26b8',
-    mark: '#ea4e1d',
+    mark: '#c63527',
     textDark: '#0f1222',
     textMuted: '#6b7280',
     textOnDark: '#f4f5f9',
