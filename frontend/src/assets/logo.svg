@@ -1,0 +1,13 @@
+<svg width="160" height="40" viewBox="0 0 160 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ITWORX">
+  <circle cx="20" cy="20" r="17" fill="#ea4e1d" />
+  <path d="M25 12 L14 20 L25 28 Z" fill="#ffffff" />
+  <text
+    x="46"
+    y="27"
+    font-family="Inter, system-ui, -apple-system, 'Segoe UI', sans-serif"
+    font-weight="800"
+    font-size="21"
+    letter-spacing="0.5"
+    fill="#ffffff"
+  >ITWORX</text>
+</svg>
