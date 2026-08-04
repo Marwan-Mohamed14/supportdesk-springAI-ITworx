@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { OrderStatusBadge, type OrderStatus } from "./OrderStatusBadge";
 
 export type Order = {
@@ -34,9 +35,13 @@ export function OrderCard({ order }: { order: Order }) {
             <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-brand-red-dark">
               Reorder
             </button>
-            <button className="rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-panel-hi hover:text-foreground">
+            <Link
+              to="/orders/$orderId"
+              params={{ orderId: order.id }}
+              className="rounded-md border border-border px-4 py-2 text-center text-sm font-medium text-muted-foreground transition-colors hover:bg-panel-hi hover:text-foreground"
+            >
               View details
-            </button>
+            </Link>
           </div>
         </div>
       </div>
