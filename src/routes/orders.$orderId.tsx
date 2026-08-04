@@ -1,8 +1,11 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft, MapPin, Package, Receipt, Truck } from "lucide-react";
+import { ArrowLeft, Download, MapPin, Package, Receipt, Truck } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { OrderStatusBadge } from "@/components/orders/OrderStatusBadge";
 import { ReorderButton } from "@/components/orders/ReorderButton";
 import { getOrder, type OrderDetail } from "@/data/orders";
+import { downloadInvoice } from "@/lib/invoice";
 import { useReorders } from "@/lib/reorder-store";
 
 export const Route = createFileRoute("/orders/$orderId")({
@@ -56,6 +59,7 @@ function OrderNotFound() {
 function OrderDetailPage() {
   const { order } = Route.useLoaderData() as { order: OrderDetail };
   const reorder = useReorders()[order.id];
+  const [downloading, setDownloading] = useState(false);
 
   return (
     <main className="min-h-screen bg-background">
