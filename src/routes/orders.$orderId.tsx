@@ -79,9 +79,25 @@ function OrderDetailPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button className="rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-panel-hi hover:text-foreground">
-              Download invoice
+            <button
+              onClick={async () => {
+                setDownloading(true);
+                try {
+                  await downloadInvoice(order);
+                  toast.success(`Invoice for ${order.id} downloaded`);
+                } catch {
+                  toast.error("Could not generate the invoice. Please try again.");
+                } finally {
+                  setDownloading(false);
+                }
+              }}
+              disabled={downloading}
+              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-panel-hi hover:text-foreground disabled:opacity-60"
+            >
+              <Download className="size-4" />
+              {downloading ? "Preparing…" : "Download invoice"}
             </button>
+
             <ReorderButton orderId={order.id} />
           </div>
         </header>
