@@ -1,4 +1,4 @@
-package com.itworx.supportdesk.dto;
+package com.itworx.supportdesk.dto.ticket;
 
 import com.itworx.supportdesk.model.Ticket.TicketPriority;
 import jakarta.validation.constraints.NotBlank;

@@ -1,7 +1,7 @@
 package com.itworx.supportdesk.service;
 
-import com.itworx.supportdesk.dto.CreateTicketRequest;
-import com.itworx.supportdesk.dto.TicketResponse;
+import com.itworx.supportdesk.dto.ticket.CreateTicketRequest;
+import com.itworx.supportdesk.dto.ticket.TicketResponse;
 import com.itworx.supportdesk.exception.InvalidTicketStateException;
 import com.itworx.supportdesk.exception.TicketNotFoundException;
 import com.itworx.supportdesk.exception.UserNotFoundException;
@@ -22,9 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
-import java.time.Instant;
 
 @Service
 public class TicketService {
@@ -38,11 +36,12 @@ public class TicketService {
     @Autowired
     OrderRepository orderRepository;
 
+
     public TicketResponse createTicket(CreateTicketRequest request) {
-        System.out.println("Received customerId: [" + request.getCustomerId() + "]");
+
 
         User customer = userRepository.findById(request.getCustomerId())
-                .orElseThrow(() -> new EntityNotFoundException("Customer not found"));
+                .orElseThrow(() -> new UserNotFoundException(request.getCustomerId()));
 
         TicketPriority priority = request.getPriority();
         String ticketNumber = generator.generate();
@@ -55,17 +54,15 @@ public class TicketService {
             UUID orderId = request.getOrderId();
             order = orderRepository.findById(orderId)
                     .orElseThrow(() -> new EntityNotFoundException("Order not found"));
-
-
         }
         ticket.setOrder(order);
         ticket.setTitle(title);
         ticket.setDescription(description);
         ticketRepository.save(ticket);
-        return new TicketResponse(ticket);
+        return TicketResponse.from(ticket);
     }
 
-    public Page<TicketResponse> ListAndFilter(TicketStatus status, TicketPriority priority, Pageable pageable) {
+    public Page<TicketResponse> listAndFilter(TicketStatus status, TicketPriority priority, Pageable pageable) {
         Page<Ticket> tickets;
         if (status != null && priority != null) {
             tickets = ticketRepository.findByStatusAndPriority(status, priority, pageable);
@@ -76,49 +73,49 @@ public class TicketService {
         } else {
             tickets = ticketRepository.findAll(pageable);
         }
-        return tickets.map(TicketResponse::new);
+        return tickets.map(TicketResponse::from);
     }
 
-@Transactional
-public Ticket assignTicket(UUID ticketId, UUID agentId) {
-    Ticket ticket = getTicketOrThrow(ticketId);
+    @Transactional
+    public Ticket assignTicket(UUID ticketId, UUID agentId) {
+        Ticket ticket = getTicketOrThrow(ticketId);
 
-    if (ticket.getStatus() == TicketStatus.CLOSED) {
-        throw new InvalidTicketStateException(
-                "Cannot assign ticket " + ticketId + ": ticket is CLOSED");
-    }
-    if (ticket.getStatus() == TicketStatus.ESCALATED) {
-        throw new InvalidTicketStateException(
-                "Cannot assign ticket " + ticketId + ": ticket is ESCALATED");
-    }
+        if (ticket.getStatus() == TicketStatus.CLOSED) {
+            throw new InvalidTicketStateException(
+                    "Cannot assign ticket " + ticketId + ": ticket is CLOSED");
+        }
+        if (ticket.getStatus() == TicketStatus.ESCALATED) {
+            throw new InvalidTicketStateException(
+                    "Cannot assign ticket " + ticketId + ": ticket is ESCALATED");
+        }
 
-    User agent = userRepository.findById(agentId)
-            .orElseThrow(() -> new UserNotFoundException(agentId));
+        User agent = userRepository.findById(agentId)
+                .orElseThrow(() -> new UserNotFoundException(agentId));
 
-    ticket.setAssignedAgent(agent);
-    ticket.setStatus(TicketStatus.IN_PROGRESS);
+        ticket.setAssignedAgent(agent);
+        ticket.setStatus(TicketStatus.IN_PROGRESS);
 
-    return ticketRepository.save(ticket);
-}
-
-@Transactional
-public Ticket escalateTicket(UUID ticketId, String reason) {
-    Ticket ticket = getTicketOrThrow(ticketId);
-
-    if (ticket.getStatus() == TicketStatus.CLOSED) {
-        throw new InvalidTicketStateException(
-                "Cannot escalate ticket " + ticketId + ": ticket is CLOSED");
+        return ticketRepository.save(ticket);
     }
 
-    ticket.setStatus(TicketStatus.ESCALATED);
-    ticket.setEscalationReason(reason);
-    ticket.setEscalatedAt(Instant.now());
+    @Transactional
+    public Ticket escalateTicket(UUID ticketId, String reason) {
+        Ticket ticket = getTicketOrThrow(ticketId);
 
-    return ticketRepository.save(ticket);
-}
+        if (ticket.getStatus() == TicketStatus.CLOSED) {
+            throw new InvalidTicketStateException(
+                    "Cannot escalate ticket " + ticketId + ": ticket is CLOSED");
+        }
 
-private Ticket getTicketOrThrow(UUID ticketId) {
-    return ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new TicketNotFoundException(ticketId));
-}
+        ticket.setStatus(TicketStatus.ESCALATED);
+        ticket.setEscalationReason(reason);
+        ticket.setEscalatedAt(Instant.now());
+
+        return ticketRepository.save(ticket);
+    }
+
+    private Ticket getTicketOrThrow(UUID ticketId) {
+        return ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new TicketNotFoundException(ticketId));
+    }
 }

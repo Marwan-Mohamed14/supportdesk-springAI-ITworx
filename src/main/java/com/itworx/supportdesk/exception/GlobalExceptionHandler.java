@@ -65,11 +65,15 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleUnreadable(HttpMessageNotReadableException ex) {
         return problem(HttpStatus.BAD_REQUEST, "Malformed Request", "Request body is missing or malformed JSON.");
     }
-
+    @ExceptionHandler(org.springframework.security.authentication.BadCredentialsException.class)
+    public ProblemDetail handleBadCredentials(org.springframework.security.authentication.BadCredentialsException ex) {
+        return problem(HttpStatus.UNAUTHORIZED, "Invalid Credentials", "Invalid email or password.");
+    }
     private ProblemDetail problem(HttpStatus status, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
         pd.setTitle(title);
         pd.setProperty("timestamp", Instant.now());
         return pd;
     }
+
 }
