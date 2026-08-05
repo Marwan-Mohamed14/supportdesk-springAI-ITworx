@@ -54,5 +54,3 @@ public class TicketController {
         return ResponseEntity.ok(com.itworx.supportdesk.dto.ticket.TicketResponse.from(ticket));
     }
 }
-
-}
