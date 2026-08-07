@@ -1,27 +1,26 @@
 import React, { useEffect, useMemo, useState, Fragment } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useProducts } from "../../context/ProductsContext.jsx";
 import {
-  COLORS, FONT, CATEGORIES, Icon, money, stockStatus, Modal, ProductForm,
-  useToasts, Toasts, CategoryPill, RatingLine, ProductImageTile, inputStyle,
+  COLORS, FONT, Icon, money, stockStatus, Modal, ProductForm,
+  useToasts, Toasts, CategoryPill, ProductImageTile, inputStyle,
 } from "./product-shared.jsx";
 
 /* ============================================================
    Product Catalog — browsing grid (Amazon-style)
    ------------------------------------------------------------
-   Shopping-first: cards are pure browsing tiles (image, name,
-   rating, price, stock) that lift slightly on hover and open the
-   full product page (ProductDetail.jsx) on click. Inventory
-   management (edit / stock / active toggle) lives there now,
-   admin-only — this grid stays uncluttered for everyone.
+   Backed by the real backend: GET /api/products?q=&category=
+   drives the grid (see ProductsContext); `q`/`category` are the
+   only filters the backend supports, so search and category are
+   real server queries — stock-status and sort are applied
+   client-side over that real, already-fetched batch (the backend
+   has no query params for either).
 
-   Backend contract (Spring):
-     GET    /api/products?q=&category=&page=&size=&sort=
-     POST   /api/products                body: {sku,name,price,category,stock}
-   ProductsContext (context/ProductsContext.jsx) currently mocks this with
-   localStorage-backed state; swap its internals for real fetch() calls
-   once the backend endpoints exist — this page doesn't need to change.
+   Cards are pure browsing tiles (image placeholder, name, price,
+   stock) that lift slightly on hover and open the full product
+   page (ProductDetail.jsx) on click. Inventory management (edit /
+   stock / active toggle) lives there now, admin-only.
    ============================================================ */
 
 function ProductCard({ product, onOpen }) {
@@ -42,13 +41,12 @@ function ProductCard({ product, onOpen }) {
       }}
     >
       <ProductImageTile category={product.category} />
-      <div style={{ marginTop: 2 }}><CategoryPill category={product.category} /></div>
+      <div style={{ marginTop: 2 }}><CategoryPill category={product.category || "Uncategorized"} /></div>
       <h3 style={{ fontFamily: FONT, fontSize: 15.5, fontWeight: 600, color: COLORS.white, margin: 0, lineHeight: 1.35, minHeight: 42 }}>
         {product.name}
       </h3>
-      <RatingLine rating={product.rating} reviewCount={product.reviewCount} />
       <div style={{ fontFamily: FONT, fontSize: 21, fontWeight: 700, color: COLORS.white, fontVariantNumeric: "tabular-nums" }}>
-        {money(product.price)}
+        {money(Number(product.price))}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <Icon name={status.icon} size={12} color={status.color} />
@@ -60,8 +58,13 @@ function ProductCard({ product, onOpen }) {
 
 export default function ProductCatalogPage() {
   const { role } = useAuth();
-  const { products, addProduct } = useProducts();
+  const { products, loading, error, categories, refresh, addProduct } = useProducts();
   const navigate = useNavigate();
+  const location = useLocation();
+  // This page is mounted at both /products (customer/agent shell) and
+  // /admin/products (admin console, reusing the exact same component) —
+  // so internal links need to stay under whichever prefix is current.
+  const basePath = location.pathname.startsWith("/admin") ? "/admin" : "";
   const { toasts, pushToast, dismiss } = useToasts();
 
   const [query, setQuery] = useState("");
@@ -73,46 +76,52 @@ export default function ProductCatalogPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalError, setModalError] = useState("");
 
-  const openProduct = (id) => navigate(`/products/${id}`);
+  // Debounced server refetch whenever the real filters (q/category) change —
+  // these are the only two the backend's search endpoint understands.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      refresh({ q: query.trim() || undefined, category: category === "All" ? undefined : category });
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, category]);
+
+  const openProduct = (id) => navigate(`${basePath}/products/${id}`);
 
   const stats = useMemo(() => {
     const inStock = products.filter(p => p.active && p.stock > 5).length;
     const low = products.filter(p => p.active && p.stock > 0 && p.stock <= 5).length;
     const out = products.filter(p => !p.active || p.stock <= 0).length;
-    return { total: products.length, inStock, low, out, categories: new Set(products.map(p => p.category)).size };
-  }, [products]);
+    return { total: products.length, inStock, low, out, categories: categories.length };
+  }, [products, categories]);
 
   const filtered = useMemo(() => {
     let list = products.filter(p => {
-      const q = query.trim().toLowerCase();
-      const matchesQ = !q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
-      const matchesCat = category === "All" || p.category === category;
       const matchesStock = stockFilter === "all" ? true : stockFilter === "in" ? p.active && p.stock > 5 : stockFilter === "low" ? p.active && p.stock > 0 && p.stock <= 5 : !p.active || p.stock <= 0;
-      return matchesQ && matchesCat && matchesStock;
+      return matchesStock;
     });
     const [key, dir] = sortKey.split("-");
-    list.sort((a, b) => {
+    list = [...list].sort((a, b) => {
       let v = 0;
       if (key === "name") v = a.name.localeCompare(b.name);
-      if (key === "price") v = a.price - b.price;
+      if (key === "price") v = Number(a.price) - Number(b.price);
       if (key === "stock") v = a.stock - b.stock;
       return dir === "desc" ? -v : v;
     });
     return list;
-  }, [products, query, category, stockFilter, sortKey]);
+  }, [products, stockFilter, sortKey]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageItems = filtered.slice((page - 1) * pageSize, page * pageSize);
   useEffect(() => { setPage(1); }, [query, category, stockFilter, sortKey]);
 
-  const handleCreate = (form) => {
-    if (products.some(p => p.sku.toLowerCase() === form.sku.trim().toLowerCase())) {
-      setModalError(`409 Conflict — a product with sku "${form.sku.trim()}" already exists.`);
-      pushToast(`SKU "${form.sku.trim()}" already exists — choose a different one.`, "error");
-      return;
+  const handleCreate = async (form) => {
+    try {
+      await addProduct(form);
+      setModalOpen(false); setModalError(""); pushToast("Product added.");
+    } catch (err) {
+      setModalError(err.message);
     }
-    addProduct(form);
-    setModalOpen(false); setModalError(""); pushToast("Product added.");
   };
   const clearFilters = () => { setQuery(""); setCategory("All"); setStockFilter("all"); };
 
@@ -152,7 +161,7 @@ export default function ProductCatalogPage() {
           <div>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: COLORS.grey, textTransform: "uppercase", letterSpacing: 0.5, borderBottom: `2px solid ${COLORS.red}`, display: "inline-block", paddingBottom: 3 }}>Category</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
-              {["All", ...CATEGORIES].map(c => (
+              {["All", ...categories].map(c => (
                 <button key={c} onClick={() => setCategory(c)} style={{ textAlign: "left", background: category === c ? "rgba(198,53,39,0.14)" : "none", border: "none", color: category === c ? COLORS.red : COLORS.grey, fontFamily: FONT, fontSize: 13, fontWeight: category === c ? 600 : 400, padding: "6px 8px", borderRadius: 7, cursor: "pointer" }}>{c}</button>
               ))}
             </div>
@@ -172,7 +181,9 @@ export default function ProductCatalogPage() {
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <span style={{ fontSize: 13, color: COLORS.grey }}>{filtered.length} {filtered.length === 1 ? "product" : "products"}</span>
+            <span style={{ fontSize: 13, color: COLORS.grey }}>
+              {loading ? "Loading…" : `${filtered.length} ${filtered.length === 1 ? "product" : "products"}`}
+            </span>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <Icon name="arrowUpDown" size={13} color={COLORS.grey} />
@@ -192,7 +203,16 @@ export default function ProductCatalogPage() {
             </div>
           </div>
 
-          {pageItems.length === 0 ? (
+          {error && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: "rgba(198,53,39,0.1)", border: `1px solid ${COLORS.red}`, borderRadius: 12, padding: "12px 16px", marginBottom: 16, fontFamily: FONT, fontSize: 13 }}>
+              <span>Couldn't load products — {error.message}</span>
+              <button onClick={() => refresh({ q: query.trim() || undefined, category: category === "All" ? undefined : category })} style={{ background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.white, borderRadius: 8, padding: "6px 12px", fontFamily: FONT, fontSize: 12, cursor: "pointer" }}>
+                Retry
+              </button>
+            </div>
+          )}
+
+          {!loading && pageItems.length === 0 ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "70px 0", border: `1px dashed ${COLORS.line}`, borderRadius: 16 }}>
               <Icon name="tag" size={28} color={COLORS.greyDim} />
               <div style={{ textAlign: "center" }}>

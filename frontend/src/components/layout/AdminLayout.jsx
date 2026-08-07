@@ -22,6 +22,8 @@ const FONT = `"Segoe UI", "Segoe UI Semibold", -apple-system, BlinkMacSystemFont
 
 const TABS = [
   { to: "/admin/metrics", label: "Metrics" },
+  { to: "/admin/products", label: "Products" },
+  { to: "/admin/orders", label: "Orders" },
   { to: "/admin/kb", label: "Knowledge Base" },
   { to: "/admin/refunds", label: "Refunds" },
   { to: "/admin/audit", label: "Audit Trail" },

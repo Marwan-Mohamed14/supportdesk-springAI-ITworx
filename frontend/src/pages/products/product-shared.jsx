@@ -38,9 +38,11 @@ export function stockStatus(p) {
   return { key: "in", label: `${p.stock} in stock`, color: COLORS.green, icon: "checkCircle" };
 }
 
-// A product can be ordered normally only if it's active AND has stock —
-// otherwise it's a pre-order (see OrdersContext.placeOrderFromProduct).
-export function isPreOrderOnly(p) { return !p.active || p.stock <= 0; }
+// The backend rejects order creation for an inactive or out-of-stock
+// product (InvalidProductStateException / InsufficientStockException) —
+// there is no pre-order/backorder concept, so this just mirrors that rule
+// to disable the "Add to order" control before the request is even sent.
+export function canOrder(p) { return p.active && p.stock > 0; }
 
 /* ---- Feather-style inline icons (no icon library dependency) —
         same set as admin-shared.jsx, plus a "star" for ratings. ---- */
@@ -72,16 +74,6 @@ export function CategoryPill({ category }) {
   return (
     <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.3, color: COLORS.grey, background: "rgba(208,211,212,0.1)", border: `1px solid ${COLORS.line}`, borderRadius: 999, padding: "3px 9px", display: "inline-flex", alignItems: "center", gap: 4 }}>
       <Icon name="tag" size={10} /> {category}
-    </span>
-  );
-}
-
-export function RatingLine({ rating, reviewCount, size = 12 }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: FONT, fontSize: 12.5, color: COLORS.grey }}>
-      <Icon name="star" size={size} color={COLORS.yellow} />
-      <span style={{ color: COLORS.white, fontWeight: 600 }}>{rating.toFixed(1)}</span>
-      <span>· {reviewCount} ratings</span>
     </span>
   );
 }

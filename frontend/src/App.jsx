@@ -53,6 +53,12 @@ function App() {
         >
           <Route path="/admin" element={<Navigate to="/admin/metrics" replace />} />
           <Route path="/admin/metrics" element={<MetricsWithAuth />} />
+          {/* Same components as the customer/agent shell — admins are excluded from
+              /products and /orders (see ProtectedRoute above), so product and order
+              management is reused here instead of duplicated. */}
+          <Route path="/admin/products" element={<ProductCatalogPage />} />
+          <Route path="/admin/products/:id" element={<ProductDetail />} />
+          <Route path="/admin/orders" element={<OrdersPage />} />
           <Route path="/admin/kb" element={<KnowledgeBaseWithAuth />} />
           <Route path="/admin/refunds" element={<RefundsWithAuth />} />
           <Route path="/admin/audit" element={<AuditWithAuth />} />

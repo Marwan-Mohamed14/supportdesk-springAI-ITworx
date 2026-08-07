@@ -1,28 +1,27 @@
-import React, { useState, useMemo, useEffect } from "react";
-import {
-  RotateCcw, Search,
-  ArrowLeft, Check, Truck, MapPin, User, Building2, X, Plus, Minus,
-  Ban, AlertTriangle, History,
-} from "lucide-react";
+import React, { useState } from "react";
+import { Check, ChevronRight, Plus, Search, Trash2, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { useOrders } from "../../context/OrdersContext.jsx";
+import { useOrders, NEXT_STATUS } from "../../context/OrdersContext.jsx";
+import { useProducts } from "../../context/ProductsContext.jsx";
+import { money, fmtDate } from "../products/product-shared.jsx";
 
 /* ============================================================
-   Orders page
+   Orders page — backed entirely by the real backend.
    ------------------------------------------------------------
-   Order state/logic lives in context/OrdersContext.jsx now (shared
-   with the product detail page, which creates orders/pre-orders
-   directly from the catalog). This file is just the UI: the order
-   list (split into Ordered / Pre-Orders tabs), the detail view,
-   and the manual "New order" / cancel modals.
-
-   Backend contract (Spring):
-     GET    /api/orders
-     POST   /api/orders               body: {title, units, unitPrice, requestedBy, department, shippingAddress, notes}
-     POST   /api/orders/{id}/reorder
-     POST   /api/orders/{id}/cancel
-   OrdersContext currently mocks this with localStorage-backed state;
-   swap its internals for real fetch() calls once the backend exists.
+   OrderController has no "list my orders" endpoint (only
+   create / getById / updateStatus), so there is no way to ask the
+   backend "what are my orders". What's shown here is exactly:
+     - orders this browser has created (tracked locally by id, then
+       always re-fetched live from GET /api/orders/{id} — see
+       OrdersContext), and
+     - anything looked up by id via the box below, using the same
+       real endpoint (it has no ownership check, so any valid id
+       works for any signed-in user).
+   No shipping address / carrier / notes / cancel / reorder here —
+   the backend has no such fields or actions, so nothing is invented
+   to fill that gap. Status can only move forward (PLACED -> PAID ->
+   SHIPPED -> DELIVERED), for ADMIN/AGENT, matching exactly what
+   OrderService.isValidTransition allows.
    ============================================================ */
 
 const COLORS = {
@@ -34,682 +33,309 @@ const COLORS = {
 const FONT = `"Segoe UI", "Segoe UI Semibold", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif`;
 
 const STATUS_STYLES = {
-  Delivered: { dot: COLORS.green, bg: "rgba(49, 180, 86, 0.14)", fg: "#5FCE7D" },
-  Processing: { dot: COLORS.yellow, bg: "rgba(248, 206, 70, 0.14)", fg: COLORS.yellow },
-  Shipped: { dot: "#4A54E1", bg: "rgba(23, 28, 143, 0.22)", fg: "#7C85F0" },
-  Cancelled: { dot: COLORS.red, bg: "rgba(198, 53, 39, 0.16)", fg: "#E2685C" },
-  "Pre-Order": { dot: "#2FB6C4", bg: "rgba(47, 182, 196, 0.14)", fg: "#5FD6E0" },
+  PLACED: { dot: COLORS.yellow, fg: COLORS.yellow, bg: "rgba(248, 206, 70, 0.14)" },
+  PAID: { dot: "#4A54E1", fg: "#7C85F0", bg: "rgba(23, 28, 143, 0.22)" },
+  SHIPPED: { dot: "#2FB6C4", fg: "#5FD6E0", bg: "rgba(47, 182, 196, 0.14)" },
+  DELIVERED: { dot: COLORS.green, fg: "#5FCE7D", bg: "rgba(49, 180, 86, 0.14)" },
+  CANCELLED: { dot: COLORS.red, fg: "#E2685C", bg: "rgba(198, 53, 39, 0.16)" },
 };
 
-const FILTERS = ["All", "Delivered", "Shipped", "Processing", "Cancelled"];
-
-function currency(n) {
-  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function todayLabel() {
-  return new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-// Precise timestamp label — date + time down to the second, used for
-// the activity log so simultaneous-day actions still order correctly.
-function tsLabel(ts) {
-  const d = new Date(ts);
-  const datePart = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-  const timePart = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-  return `${datePart}, ${timePart}`;
-}
-
-/* ---------- shared small pieces ---------- */
+const inputStyle = {
+  border: `1px solid ${COLORS.line}`, background: COLORS.panelHi, color: COLORS.white,
+  borderRadius: 8, padding: "10px 12px", fontFamily: FONT, fontSize: 14, outline: "none", width: "100%",
+};
 
 function StatusBadge({ status }) {
-  const s = STATUS_STYLES[status] || STATUS_STYLES.Processing;
+  const s = STATUS_STYLES[status] || STATUS_STYLES.PLACED;
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 6,
-      background: s.bg, color: s.fg, borderRadius: 999,
-      padding: "4px 10px", fontFamily: FONT, fontSize: 12, fontWeight: 600,
-    }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: s.bg, color: s.fg, borderRadius: 999, padding: "4px 10px", fontFamily: FONT, fontSize: 12, fontWeight: 600 }}>
       <span style={{ width: 6, height: 6, borderRadius: "50%", background: s.dot }} />
       {status}
     </span>
   );
 }
 
-function HoverButton({ children, onClick, type = "button", primary, danger, style }) {
+function HoverButton({ children, onClick, type = "button", primary, disabled, style }) {
   const [hover, setHover] = useState(false);
-  const base = {
-    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-    borderRadius: 8, padding: "10px 16px", fontFamily: FONT, fontSize: 14, fontWeight: 600,
-    cursor: "pointer", whiteSpace: "nowrap", transition: "background .15s",
-  };
-  let variant;
-  if (primary) {
-    variant = { background: hover ? COLORS.redDark : COLORS.red, color: COLORS.white, border: "none" };
-  } else if (danger) {
-    variant = {
-      background: hover ? "rgba(198,53,39,0.12)" : "transparent",
-      color: "#E2685C", border: `1px solid rgba(198,53,39,0.4)`,
-    };
-  } else {
-    variant = {
-      background: hover ? COLORS.panelHi : "transparent",
-      color: COLORS.grey, border: `1px solid ${COLORS.line}`,
-    };
-  }
+  const variant = primary
+    ? { background: disabled ? COLORS.panelHi : hover ? COLORS.redDark : COLORS.red, color: disabled ? COLORS.greyDim : COLORS.white, border: "none" }
+    : { background: hover ? COLORS.panelHi : "transparent", color: COLORS.grey, border: `1px solid ${COLORS.line}` };
   return (
     <button
-      type={type}
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{ ...base, ...variant, ...style }}
+      type={type} onClick={onClick} disabled={disabled}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 8,
+        padding: "10px 16px", fontFamily: FONT, fontSize: 14, fontWeight: 600,
+        cursor: disabled ? "not-allowed" : "pointer", whiteSpace: "nowrap", transition: "background .15s",
+        ...variant, ...style,
+      }}
     >
       {children}
     </button>
   );
 }
 
-function StatCard({ label, value, valueColor }) {
-  return (
-    <div style={{
-      background: COLORS.panel, border: `1px solid ${COLORS.line}`,
-      borderRadius: 12, padding: "16px 20px", flex: 1, minWidth: 180,
-    }}>
-      <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.greyDim }}>
-        {label}
-      </div>
-      <div style={{ fontFamily: FONT, fontSize: 24, fontWeight: 700, color: valueColor || COLORS.white, marginTop: 6 }}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function OrderRow({ order, onViewDetails, onReorder, onCancel }) {
-  const isCancellable = order.status === "Processing" || order.status === "Shipped";
-  return (
-    <div style={{
-      background: COLORS.panel, border: `1px solid ${COLORS.line}`, borderRadius: 12,
-      padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
-      gap: 16, flexWrap: "wrap",
-    }}>
-      <div style={{ minWidth: 240 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ fontFamily: FONT, fontWeight: 700, color: COLORS.white }}>{order.id}</span>
-          <StatusBadge status={order.status} />
-        </div>
-        <div style={{ fontFamily: FONT, fontSize: 15, color: COLORS.grey, marginTop: 6 }}>{order.title}</div>
-        <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.greyDim, marginTop: 4 }}>
-          {order.date} · {order.units} units · Requested by {order.requestedBy}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 24, marginLeft: "auto" }}>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.greyDim }}>Total</div>
-          <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: COLORS.white }}>{currency(order.total)}</div>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {order.kind !== "preorder" && (
-            <HoverButton primary onClick={() => onReorder(order)}>
-              <RotateCcw size={14} /> Reorder
-            </HoverButton>
-          )}
-          <HoverButton onClick={() => onViewDetails(order)}>View details</HoverButton>
-          {isCancellable && (
-            <HoverButton danger onClick={() => onCancel(order)}>
-              <Ban size={14} /> Cancel order
-            </HoverButton>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InfoRow({ icon: Icon, label, value }) {
-  return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-      <div style={{
-        marginTop: 2, width: 32, height: 32, flexShrink: 0, borderRadius: 8,
-        background: COLORS.panelHi, display: "flex", alignItems: "center", justifyContent: "center",
-      }}>
-        <Icon size={15} color={COLORS.greyDim} />
-      </div>
-      <div>
-        <div style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.greyDim }}>{label}</div>
-        <div style={{ fontFamily: FONT, fontSize: 14, color: COLORS.grey, marginTop: 2 }}>{value}</div>
-      </div>
-    </div>
-  );
-}
-
-function OrderTimeline({ steps, cancelled }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
-      {steps.map((step, i) => {
-        const done = Boolean(step.date);
-        const isLast = i === steps.length - 1;
-        const isCancelStep = cancelled && step.label === "Cancelled";
-        const dotColor = isCancelStep ? COLORS.red : done ? COLORS.green : COLORS.panelHi;
-        return (
-          <div key={step.label} style={{ display: "flex", gap: 12 }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              <div style={{
-                width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
-                background: dotColor, display: "flex", alignItems: "center", justifyContent: "center",
-                border: done || isCancelStep ? "none" : "1px solid rgba(208,211,212,0.3)",
-              }}>
-                {(done || isCancelStep) && <Check size={13} strokeWidth={3} color={COLORS.white} />}
-              </div>
-              {!isLast && (
-                <div style={{
-                  width: 1, flex: 1, minHeight: 24, margin: "4px 0",
-                  background: done ? COLORS.green : COLORS.line,
-                }} />
-              )}
-            </div>
-            <div style={{ paddingBottom: 24 }}>
-              <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: done || isCancelStep ? COLORS.white : COLORS.greyDim }}>
-                {step.label}
-              </div>
-              <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.greyDim, marginTop: 2 }}>
-                {step.date || "Pending"}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function Panel({ children, style }) {
-  return (
-    <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.line}`, borderRadius: 12, padding: "20px", ...style }}>
-      {children}
-    </div>
-  );
+  return <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.line}`, borderRadius: 12, padding: "20px", ...style }}>{children}</div>;
 }
 
-function ActivityLog({ entries }) {
-  const sorted = [...entries].sort((a, b) => b.at - a.at);
+function OrderRow({ order, expanded, onToggle, canAdvance, onAdvance, advancing }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
-      {sorted.map((entry, i) => (
-        <div key={i} style={{
-          display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0",
-          borderTop: i === 0 ? "none" : `1px solid rgba(208,211,212,0.1)`,
-        }}>
-          <div style={{
-            width: 28, height: 28, flexShrink: 0, borderRadius: 8, marginTop: 1,
-            background: COLORS.panelHi, display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <History size={13} color={COLORS.greyDim} />
-          </div>
-          <div>
-            <div style={{ fontFamily: FONT, fontSize: 13.5, color: COLORS.white }}>
-              {entry.action}
-            </div>
-            <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.greyDim, marginTop: 2 }}>
-              by {entry.by} · {tsLabel(entry.at)}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function OrderDetailsPage({ order, onBack, onReorder, onCancel }) {
-  const isCancelled = order.status === "Cancelled";
-  const isCancellable = order.status === "Processing" || order.status === "Shipped";
-
-  return (
-    <div style={{ maxWidth: 1200 }}>
-      <button
-        onClick={onBack}
-        style={{
-          display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontSize: 14, fontWeight: 600,
-          color: COLORS.grey, background: "none", border: "none", cursor: "pointer", marginBottom: 24, padding: 0,
-        }}
-      >
-        <ArrowLeft size={16} /> Back to orders
-      </button>
-
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-        <div>
-          <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.red, marginBottom: 8 }}>
-            ITWorx SupportDesk
-          </div>
+    <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.line}`, borderRadius: 12, overflow: "hidden" }}>
+      <div onClick={onToggle} style={{ padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", cursor: "pointer" }}>
+        <div style={{ minWidth: 240 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <h1 style={{ fontFamily: FONT, fontSize: 28, fontWeight: 700, color: COLORS.white, margin: 0 }}>{order.id}</h1>
+            <span style={{ fontFamily: FONT, fontWeight: 700, color: COLORS.white }}>{order.orderNumber}</span>
             <StatusBadge status={order.status} />
           </div>
-          <p style={{ fontFamily: FONT, fontSize: 14, color: COLORS.greyDim, maxWidth: 480, marginTop: 8 }}>{order.title}</p>
+          <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.greyDim, marginTop: 6 }}>
+            {order.orderDate ? fmtDate(order.orderDate) : "—"} · {order.items.length} item{order.items.length === 1 ? "" : "s"}
+          </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {isCancellable && (
-            <HoverButton danger onClick={() => onCancel(order)}>
-              <Ban size={14} /> Cancel order
-            </HoverButton>
-          )}
-          {order.kind !== "preorder" && (
-            <HoverButton primary onClick={() => onReorder(order)}>
-              <RotateCcw size={14} /> Reorder
-            </HoverButton>
-          )}
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.greyDim }}>Total</div>
+            <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: COLORS.white }}>{money(Number(order.totalAmount))}</div>
+          </div>
+          <ChevronRight size={16} color={COLORS.greyDim} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 150ms" }} />
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, paddingBottom: 40 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <Panel>
-            <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 700, color: COLORS.white, marginBottom: 16 }}>Items in this order</div>
-            {order.lineItems.map((item, i) => (
-              <div key={item.name} style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0",
-                borderTop: i === 0 ? "none" : `1px solid rgba(208,211,212,0.1)`,
-              }}>
-                <div>
-                  <div style={{ fontFamily: FONT, fontSize: 14, color: COLORS.grey }}>{item.name}</div>
-                  <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.greyDim, marginTop: 2 }}>
-                    Qty {item.qty} · {currency(item.unitPrice)} each
-                  </div>
-                </div>
-                <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 700, color: COLORS.white }}>
-                  {currency(item.qty * item.unitPrice)}
-                </div>
+      {expanded && (
+        <div style={{ borderTop: `1px solid ${COLORS.line}`, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {order.items.map((item) => (
+            <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: FONT, fontSize: 13.5 }}>
+              <div>
+                <div style={{ color: COLORS.white }}>{item.productName}</div>
+                <div style={{ color: COLORS.greyDim, fontSize: 12, marginTop: 2 }}>{item.productSku} · Qty {item.quantity} · {money(Number(item.unitPrice))} each</div>
               </div>
-            ))}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 16, marginTop: 4, borderTop: `1px solid ${COLORS.line}` }}>
-              <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: COLORS.grey }}>Total</div>
-              <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: COLORS.white }}>{currency(order.total)}</div>
+              <div style={{ color: COLORS.white, fontWeight: 700 }}>{money(Number(item.lineTotal))}</div>
             </div>
-          </Panel>
-
-          <Panel>
-            <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 700, color: COLORS.white, marginBottom: 8 }}>Notes</div>
-            <p style={{ fontFamily: FONT, fontSize: 14, color: COLORS.greyDim, margin: 0 }}>{order.notes}</p>
-          </Panel>
-
-          <Panel style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-            <InfoRow icon={User} label="Requested by" value={order.requestedBy} />
-            <InfoRow icon={Building2} label="Department" value={order.department} />
-            <InfoRow icon={MapPin} label="Shipping address" value={order.shippingAddress} />
-            <InfoRow icon={Truck} label="Carrier / tracking" value={order.carrier === "—" ? "—" : `${order.carrier} · ${order.trackingNumber}`} />
-          </Panel>
-
-          <Panel>
-            <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 700, color: COLORS.white, marginBottom: 4 }}>Activity log</div>
-            <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.greyDim, marginBottom: 12 }}>
-              Every change made to this order, with who made it and exactly when.
-            </div>
-            <ActivityLog entries={order.activityLog || []} />
-          </Panel>
+          ))}
+          <div style={{ fontFamily: FONT, fontSize: 11.5, color: COLORS.greyDim, marginTop: 4 }}>Order ID: {order.id}</div>
+          {canAdvance && NEXT_STATUS[order.status] && (
+            <HoverButton primary disabled={advancing} onClick={() => onAdvance(order)} style={{ alignSelf: "flex-start", marginTop: 6 }}>
+              {advancing ? "Updating…" : `Advance to ${NEXT_STATUS[order.status]}`}
+            </HoverButton>
+          )}
         </div>
-
-        <Panel style={{ height: "fit-content" }}>
-          <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 700, color: COLORS.white, marginBottom: 20 }}>Order timeline</div>
-          <OrderTimeline steps={order.timeline} cancelled={isCancelled} />
-        </Panel>
-      </div>
+      )}
     </div>
   );
 }
 
-/* ---------- modals ---------- */
-
-const fieldLabelStyle = {
-  fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
-  textTransform: "uppercase", color: COLORS.greyDim,
-};
-const inputStyle = {
-  border: `1px solid ${COLORS.line}`, background: COLORS.panelHi, color: COLORS.white,
-  borderRadius: 8, padding: "10px 12px", fontFamily: FONT, fontSize: 14, outline: "none", width: "100%",
-};
-
-function FormField({ label, children }) {
+function LineItemRow({ line, products, onChange, onRemove, removable }) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <span style={fieldLabelStyle}>{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function ModalShell({ onClose, children, maxWidth = 480 }) {
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-        background: "rgba(16,24,32,0.72)", zIndex: 60, padding: 16,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "100%", maxWidth, maxHeight: "90vh", overflowY: "auto",
-          background: COLORS.panel, border: `1px solid ${COLORS.line}`, borderRadius: 12, padding: 24,
-        }}
-      >
-        {children}
-      </div>
+    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+      <select value={line.productId} onChange={(e) => onChange({ productId: e.target.value })} style={{ ...inputStyle, flex: 1 }}>
+        <option value="" disabled>Select a product…</option>
+        {products.map((p) => (
+          <option key={p.id} value={p.id} disabled={!p.active || p.stock <= 0}>
+            {p.name} — {money(Number(p.price))} {(!p.active || p.stock <= 0) ? "(unavailable)" : `(${p.stock} in stock)`}
+          </option>
+        ))}
+      </select>
+      <input
+        type="number" min={1} value={line.quantity} onChange={(e) => onChange({ quantity: e.target.value })}
+        style={{ ...inputStyle, width: 80 }}
+      />
+      {removable && (
+        <button type="button" onClick={onRemove} style={{ background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.greyDim, borderRadius: 8, width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+          <Trash2 size={14} />
+        </button>
+      )}
     </div>
   );
 }
 
-function NewOrderModal({ onClose, onCreate }) {
-  const [itemName, setItemName] = useState("");
-  const [qty, setQty] = useState(1);
-  const [unitPrice, setUnitPrice] = useState("");
-  const [requestedBy, setRequestedBy] = useState("");
-  const [department, setDepartment] = useState("");
-  const [shippingAddress, setShippingAddress] = useState("");
-  const [notes, setNotes] = useState("");
+function NewOrderModal({ products, onClose, onCreate }) {
+  const [lines, setLines] = useState([{ productId: "", quantity: 1 }]);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const total = (Number(qty) || 0) * (Number(unitPrice) || 0);
+  const updateLine = (i, patch) => setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  const addLine = () => setLines((ls) => [...ls, { productId: "", quantity: 1 }]);
+  const removeLine = (i) => setLines((ls) => ls.filter((_, idx) => idx !== i));
 
-  function handleSubmit(e) {
+  const total = lines.reduce((sum, l) => {
+    const p = products.find((pr) => pr.id === l.productId);
+    return sum + (p ? Number(p.price) * Number(l.quantity || 0) : 0);
+  }, 0);
+
+  async function handleSubmit(e) {
     e.preventDefault();
-    if (!itemName.trim() || !requestedBy.trim() || !unitPrice || Number(qty) < 1) {
-      setError("Please fill in the item, quantity, unit price and requester.");
+    if (lines.some((l) => !l.productId || Number(l.quantity) < 1)) {
+      setError("Pick a product and a quantity of at least 1 for every line.");
       return;
     }
-    onCreate({
-      title: itemName.trim(),
-      units: Number(qty),
-      requestedBy: requestedBy.trim(),
-      department: department.trim() || "—",
-      shippingAddress: shippingAddress.trim() || "Not specified",
-      notes: notes.trim() || "No additional notes.",
-      lineItems: [{ name: itemName.trim(), qty: Number(qty), unitPrice: Number(unitPrice) }],
-      total,
-    });
+    setSubmitting(true);
+    setError("");
+    try {
+      await onCreate(lines.map((l) => ({ productId: l.productId, quantity: Number(l.quantity) })));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
-    <ModalShell onClose={onClose} maxWidth={520}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
-        <div>
-          <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.red, marginBottom: 4 }}>
-            ITWorx SupportDesk
-          </div>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(16,24,32,0.72)", zIndex: 60, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto", background: COLORS.panel, border: `1px solid ${COLORS.line}`, borderRadius: 12, padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <h2 style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: COLORS.white, margin: 0 }}>New order</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.greyDim, cursor: "pointer" }}><X size={18} /></button>
         </div>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.greyDim, cursor: "pointer", padding: 4 }}>
-          <X size={18} />
-        </button>
+
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {lines.map((line, i) => (
+            <LineItemRow key={i} line={line} products={products} onChange={(patch) => updateLine(i, patch)} onRemove={() => removeLine(i)} removable={lines.length > 1} />
+          ))}
+          <HoverButton onClick={addLine} style={{ alignSelf: "flex-start" }}><Plus size={14} /> Add another item</HoverButton>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: COLORS.panelHi, borderRadius: 8, padding: "12px 16px" }}>
+            <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: COLORS.grey }}>Estimated total</span>
+            <span style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: COLORS.white }}>{money(total)}</span>
+          </div>
+
+          {error && <div style={{ fontFamily: FONT, fontSize: 13.5, color: "#E2685C" }}>{error}</div>}
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 4 }}>
+            <HoverButton onClick={onClose}>Cancel</HoverButton>
+            <HoverButton primary type="submit" disabled={submitting}>{submitting ? "Placing…" : "Place order"}</HoverButton>
+          </div>
+        </form>
       </div>
-
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <FormField label="Item / licence name">
-          <input style={inputStyle} value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="e.g. Dell Latitude 5550 Laptop" />
-        </FormField>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <FormField label="Quantity">
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button type="button" onClick={() => setQty((q) => Math.max(1, Number(q) - 1))}
-                style={{ ...inputStyle, width: 36, height: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Minus size={14} />
-              </button>
-              <input type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)}
-                style={{ ...inputStyle, textAlign: "center" }} />
-              <button type="button" onClick={() => setQty((q) => Number(q) + 1)}
-                style={{ ...inputStyle, width: 36, height: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Plus size={14} />
-              </button>
-            </div>
-          </FormField>
-          <FormField label="Unit price (USD)">
-            <input type="number" min={0} step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)}
-              placeholder="0.00" style={inputStyle} />
-          </FormField>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <FormField label="Requested by">
-            <input style={inputStyle} value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} placeholder="Your name" />
-          </FormField>
-          <FormField label="Department">
-            <input style={inputStyle} value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. IT Operations" />
-          </FormField>
-        </div>
-
-        <FormField label="Shipping address">
-          <input style={inputStyle} value={shippingAddress} onChange={(e) => setShippingAddress(e.target.value)} placeholder="e.g. ITWorx Smart Village, Giza, Egypt" />
-        </FormField>
-
-        <FormField label="Notes (optional)">
-          <textarea rows={2} style={{ ...inputStyle, resize: "none" }} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any special instructions..." />
-        </FormField>
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: COLORS.panelHi, borderRadius: 8, padding: "12px 16px" }}>
-          <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: COLORS.grey }}>Estimated total</span>
-          <span style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: COLORS.white }}>{currency(total || 0)}</span>
-        </div>
-
-        {error && <div style={{ fontFamily: FONT, fontSize: 14, color: "#E2685C" }}>{error}</div>}
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 8 }}>
-          <HoverButton onClick={onClose}>Cancel</HoverButton>
-          <HoverButton primary type="submit">Place order</HoverButton>
-        </div>
-      </form>
-    </ModalShell>
+    </div>
   );
 }
-
-function CancelOrderModal({ order, onClose, onConfirm }) {
-  return (
-    <ModalShell onClose={onClose} maxWidth={440}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
-        <div style={{
-          width: 40, height: 40, flexShrink: 0, borderRadius: "50%",
-          background: "rgba(198,53,39,0.14)", display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <AlertTriangle size={18} color="#E2685C" />
-        </div>
-        <div>
-          <h2 style={{ fontFamily: FONT, fontSize: 17, fontWeight: 700, color: COLORS.white, margin: 0 }}>Cancel {order.id}?</h2>
-          <p style={{ fontFamily: FONT, fontSize: 14, color: COLORS.greyDim, margin: "4px 0 0" }}>{order.title}</p>
-        </div>
-      </div>
-      <p style={{ fontFamily: FONT, fontSize: 14, color: COLORS.grey, marginBottom: 24 }}>
-        This will mark the order as cancelled and stop any further fulfilment. This action can't be undone.
-      </p>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
-        <HoverButton onClick={onClose}>Keep order</HoverButton>
-        <HoverButton primary onClick={() => onConfirm(order)}><Ban size={14} /> Cancel order</HoverButton>
-      </div>
-    </ModalShell>
-  );
-}
-
-/* ---------- page ---------- */
-
-const TABS = [
-  { key: "ordered", label: "Ordered" },
-  { key: "preorder", label: "Pre-Orders" },
-];
 
 export default function OrdersPage() {
-  const { user } = useAuth();
-  const actingUser = user?.name || "You";
-  const { orders, createManualOrder, reorder, cancelOrder } = useOrders();
+  const { role } = useAuth();
+  const { orders, loading, error, placeOrder, lookupOrder, advanceStatus } = useOrders();
+  const { products } = useProducts();
 
-  const [activeTab, setActiveTab] = useState("ordered");
-  const [activeFilter, setActiveFilter] = useState("All");
-  const [query, setQuery] = useState("");
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [toast, setToast] = useState(null);
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
-  const [cancelTarget, setCancelTarget] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [lookupId, setLookupId] = useState("");
+  const [lookupError, setLookupError] = useState("");
+  const [lookingUp, setLookingUp] = useState(false);
+  const [advancingId, setAdvancingId] = useState(null);
+  const [toast, setToast] = useState(null);
 
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3200);
-    return () => clearTimeout(t);
-  }, [toast]);
+  const canManageStatus = role === "ADMIN" || role === "AGENT";
 
-  function handleReorder(order) {
-    const newOrder = reorder(order, actingUser);
-    setToast(`Reorder placed — ${newOrder.id} created from ${order.id}`);
-    setSelectedOrder(null);
-    setActiveFilter("All");
-    setActiveTab("ordered");
-  }
+  const showToast = (message) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 3200);
+  };
 
-  function handleCreateOrder(formData) {
-    const newOrder = createManualOrder(formData, actingUser);
-    setToast(`New order placed — ${newOrder.id}`);
+  const handleCreate = async (items) => {
+    const order = await placeOrder(items);
     setShowNewOrderModal(false);
-    setActiveFilter("All");
-    setActiveTab("ordered");
-  }
+    setExpandedId(order.id);
+    showToast(`Order ${order.orderNumber} placed.`);
+  };
 
-  function handleCancelOrder(order) {
-    const updated = cancelOrder(order, actingUser);
-    setToast(`${order.id} has been cancelled`);
-    setCancelTarget(null);
-    setSelectedOrder((prev) => (prev && prev.id === order.id ? { ...prev, ...updated } : prev));
-  }
+  const handleLookup = async (e) => {
+    e.preventDefault();
+    if (!lookupId.trim()) return;
+    setLookingUp(true);
+    setLookupError("");
+    try {
+      const found = await lookupOrder(lookupId.trim());
+      setExpandedId(found.id);
+      setLookupId("");
+    } catch (err) {
+      setLookupError(err.message);
+    } finally {
+      setLookingUp(false);
+    }
+  };
 
-  const tabOrders = useMemo(
-    () => orders.filter((o) => (activeTab === "preorder" ? o.kind === "preorder" : o.kind !== "preorder")),
-    [orders, activeTab]
-  );
+  const handleAdvance = async (order) => {
+    setAdvancingId(order.id);
+    try {
+      const updated = await advanceStatus(order);
+      showToast(`${updated.orderNumber} is now ${updated.status}.`);
+    } catch (err) {
+      showToast(err.message);
+    } finally {
+      setAdvancingId(null);
+    }
+  };
 
-  const filteredOrders = useMemo(() => {
-    return tabOrders
-      .filter((o) => {
-        const matchesFilter = activeTab === "preorder" || activeFilter === "All" || o.status === activeFilter;
-        const q = query.trim().toLowerCase();
-        const matchesQuery = !q || o.id.toLowerCase().includes(q) || o.title.toLowerCase().includes(q) || o.requestedBy.toLowerCase().includes(q);
-        return matchesFilter && matchesQuery;
-      })
-      .sort((a, b) => b.createdAt - a.createdAt);
-  }, [tabOrders, activeFilter, query, activeTab]);
-
-  const orderedOrders = useMemo(() => orders.filter((o) => o.kind !== "preorder"), [orders]);
-  const preOrderCount = orders.length - orderedOrders.length;
-  const awaitingDelivery = orderedOrders.filter((o) => ["Processing", "Shipped"].includes(o.status)).length;
-  const spendToDate = orderedOrders.reduce((sum, o) => sum + o.total, 0);
+  const totalSpend = orders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
 
   return (
     <div style={{ minHeight: "100vh", width: "100%", background: COLORS.ink, color: COLORS.white, fontFamily: FONT, padding: "32px 40px" }}>
-      {selectedOrder ? (
-        <OrderDetailsPage
-          order={selectedOrder}
-          onBack={() => setSelectedOrder(null)}
-          onReorder={handleReorder}
-          onCancel={setCancelTarget}
-        />
-      ) : (
-        <div style={{ maxWidth: 1200 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.red, marginBottom: 8 }}>
-                ITWorx SupportDesk
-              </div>
-              <h1 style={{ fontFamily: FONT, fontSize: 28, fontWeight: 700, color: COLORS.white, margin: 0 }}>Orders</h1>
-              <p style={{ fontFamily: FONT, fontSize: 14, color: COLORS.greyDim, maxWidth: 420, marginTop: 8 }}>
-                Every hardware, licence and accessory request you have raised, plus anything pre-ordered while out of stock.
-              </p>
-            </div>
-            <HoverButton primary onClick={() => setShowNewOrderModal(true)}>New order</HoverButton>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
+          <div>
+            <h1 style={{ fontFamily: FONT, fontSize: 28, fontWeight: 700, color: COLORS.white, margin: 0 }}>Orders</h1>
+            <p style={{ fontFamily: FONT, fontSize: 14, color: COLORS.greyDim, maxWidth: 460, marginTop: 8 }}>
+              Orders you've placed from this browser, plus anything you look up by order ID below.
+            </p>
           </div>
-
-          <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
-            {TABS.map((t) => {
-              const isActive = activeTab === t.key;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => setActiveTab(t.key)}
-                  style={{
-                    borderRadius: 10, padding: "9px 18px", fontFamily: FONT, fontSize: 14, fontWeight: 700, cursor: "pointer",
-                    border: isActive ? `1px solid ${COLORS.red}` : `1px solid ${COLORS.line}`,
-                    color: isActive ? COLORS.white : COLORS.grey,
-                    background: isActive ? "rgba(198,53,39,0.14)" : "transparent",
-                  }}
-                >
-                  {t.label}{t.key === "preorder" && preOrderCount > 0 ? ` (${preOrderCount})` : ""}
-                </button>
-              );
-            })}
-          </div>
-
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-            <StatCard label="Orders this year" value={orderedOrders.length + 33} />
-            <StatCard label="Spend to date" value={currency(spendToDate)} />
-            <StatCard label="Awaiting delivery" value={awaitingDelivery} valueColor={COLORS.yellow} />
-            <StatCard label="Pre-orders pending" value={preOrderCount} valueColor="#5FD6E0" />
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 20 }}>
-            {activeTab === "ordered" ? (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {FILTERS.map((f) => {
-                  const isActive = activeFilter === f;
-                  return (
-                    <button
-                      key={f}
-                      onClick={() => setActiveFilter(f)}
-                      style={{
-                        borderRadius: 999, padding: "6px 16px", fontFamily: FONT, fontSize: 14, fontWeight: 600, cursor: "pointer",
-                        border: isActive ? `1px solid ${COLORS.red}` : `1px solid ${COLORS.line}`,
-                        color: isActive ? COLORS.white : COLORS.grey,
-                        background: isActive ? "rgba(198,53,39,0.14)" : "transparent",
-                      }}
-                    >
-                      {f}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : <div />}
-            <div style={{ position: "relative" }}>
-              <Search size={15} color={COLORS.greyDim} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search orders..."
-                style={{ ...inputStyle, width: 220, paddingLeft: 36 }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 40 }}>
-            {filteredOrders.length > 0 ? (
-              filteredOrders.map((order) => (
-                <OrderRow key={order.id} order={order} onViewDetails={setSelectedOrder} onReorder={handleReorder} onCancel={setCancelTarget} />
-              ))
-            ) : (
-              <Panel style={{ textAlign: "center", color: COLORS.greyDim, padding: "40px 20px" }}>
-                {activeTab === "preorder"
-                  ? "No pre-orders yet — order an out-of-stock product from the catalog to see it here."
-                  : "No orders match this filter or search."}
-              </Panel>
-            )}
-          </div>
+          <HoverButton primary onClick={() => setShowNewOrderModal(true)}><Plus size={14} /> New order</HoverButton>
         </div>
+
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
+          <Panel style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.greyDim }}>Tracked orders</div>
+            <div style={{ fontFamily: FONT, fontSize: 24, fontWeight: 700, color: COLORS.white, marginTop: 6 }}>{orders.length}</div>
+          </Panel>
+          <Panel style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.greyDim }}>Total spend</div>
+            <div style={{ fontFamily: FONT, fontSize: 24, fontWeight: 700, color: COLORS.white, marginTop: 6 }}>{money(totalSpend)}</div>
+          </Panel>
+        </div>
+
+        <form onSubmit={handleLookup} style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <Search size={15} color={COLORS.greyDim} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+            <input value={lookupId} onChange={(e) => setLookupId(e.target.value)} placeholder="Look up an order by its ID…" style={{ ...inputStyle, paddingLeft: 36 }} />
+          </div>
+          <HoverButton type="submit" disabled={lookingUp}>{lookingUp ? "Looking up…" : "Look up"}</HoverButton>
+        </form>
+        {lookupError && <div style={{ fontFamily: FONT, fontSize: 13, color: "#E2685C", marginTop: -10, marginBottom: 16 }}>{lookupError}</div>}
+
+        {error && (
+          <div style={{ background: "rgba(198,53,39,0.1)", border: `1px solid ${COLORS.red}`, borderRadius: 12, padding: "12px 16px", marginBottom: 16, fontFamily: FONT, fontSize: 13 }}>
+            Couldn't load your tracked orders — {error.message}
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingBottom: 40 }}>
+          {loading ? (
+            <Panel style={{ textAlign: "center", color: COLORS.greyDim }}>Loading…</Panel>
+          ) : orders.length === 0 ? (
+            <Panel style={{ textAlign: "center", color: COLORS.greyDim, padding: "40px 20px" }}>
+              No orders yet — place one from the catalog or above, or look one up by ID.
+            </Panel>
+          ) : (
+            orders.map((order) => (
+              <OrderRow
+                key={order.id}
+                order={order}
+                expanded={expandedId === order.id}
+                onToggle={() => setExpandedId((id) => (id === order.id ? null : order.id))}
+                canAdvance={canManageStatus}
+                advancing={advancingId === order.id}
+                onAdvance={handleAdvance}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      {showNewOrderModal && (
+        <NewOrderModal products={products} onClose={() => setShowNewOrderModal(false)} onCreate={handleCreate} />
       )}
 
-      {showNewOrderModal && <NewOrderModal onClose={() => setShowNewOrderModal(false)} onCreate={handleCreateOrder} />}
-      {cancelTarget && <CancelOrderModal order={cancelTarget} onClose={() => setCancelTarget(null)} onConfirm={handleCancelOrder} />}
-
       {toast && (
-        <div style={{
-          position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
-          display: "flex", alignItems: "center", gap: 10, borderRadius: 8, padding: "12px 16px",
-          fontFamily: FONT, fontSize: 14, fontWeight: 600, color: COLORS.white,
-          background: COLORS.panelHi, border: `1px solid ${COLORS.line}`, boxShadow: "0 8px 24px rgba(0,0,0,0.3)", zIndex: 50,
-        }}>
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 10, borderRadius: 8, padding: "12px 16px", fontFamily: FONT, fontSize: 14, fontWeight: 600, color: COLORS.white, background: COLORS.panelHi, border: `1px solid ${COLORS.line}`, boxShadow: "0 8px 24px rgba(0,0,0,0.3)", zIndex: 50 }}>
           <span style={{ width: 20, height: 20, flexShrink: 0, borderRadius: "50%", background: COLORS.green, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Check size={12} strokeWidth={3} color={COLORS.white} />
           </span>
