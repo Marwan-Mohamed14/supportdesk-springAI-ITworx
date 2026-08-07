@@ -1,26 +1,28 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
-  Package, Ticket, FileText, PanelLeft, RotateCcw, Search,
+  RotateCcw, Search,
   ArrowLeft, Check, Truck, MapPin, User, Building2, X, Plus, Minus,
-  Ban, AlertTriangle, History, Pencil,
+  Ban, AlertTriangle, History,
 } from "lucide-react";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { useOrders } from "../../context/OrdersContext.jsx";
 
 /* ============================================================
    Orders page
    ------------------------------------------------------------
-   Scoped like pages/products/catalog.jsx: a standalone page
-   component meant to be routed to from the shared App.jsx.
-   No app shell / global nav here beyond the local sidebar,
-   which mirrors the "Products / Tickets / Orders" nav used
-   elsewhere in SupportDesk.
+   Order state/logic lives in context/OrdersContext.jsx now (shared
+   with the product detail page, which creates orders/pre-orders
+   directly from the catalog). This file is just the UI: the order
+   list (split into Ordered / Pre-Orders tabs), the detail view,
+   and the manual "New order" / cancel modals.
 
-   MOCK_MODE: order data lives in local state (DEFAULT_ORDERS)
-   so this page runs standalone in `npm run dev`. Swap in real
-   fetch() calls against a future:
+   Backend contract (Spring):
      GET    /api/orders
      POST   /api/orders               body: {title, units, unitPrice, requestedBy, department, shippingAddress, notes}
      POST   /api/orders/{id}/reorder
      POST   /api/orders/{id}/cancel
+   OrdersContext currently mocks this with localStorage-backed state;
+   swap its internals for real fetch() calls once the backend exists.
    ============================================================ */
 
 const COLORS = {
@@ -36,103 +38,10 @@ const STATUS_STYLES = {
   Processing: { dot: COLORS.yellow, bg: "rgba(248, 206, 70, 0.14)", fg: COLORS.yellow },
   Shipped: { dot: "#4A54E1", bg: "rgba(23, 28, 143, 0.22)", fg: "#7C85F0" },
   Cancelled: { dot: COLORS.red, bg: "rgba(198, 53, 39, 0.16)", fg: "#E2685C" },
+  "Pre-Order": { dot: "#2FB6C4", bg: "rgba(47, 182, 196, 0.14)", fg: "#5FD6E0" },
 };
 
 const FILTERS = ["All", "Delivered", "Shipped", "Processing", "Cancelled"];
-
-const NAV_ITEMS = [
-  { label: "Products", icon: Package },
-  { label: "Tickets", icon: Ticket },
-  { label: "Orders", icon: FileText },
-];
-
-const DEFAULT_ORDERS = [
-  {
-    id: "ORD-24817", status: "Delivered",
-    title: "Dell Latitude 5550 · Docking Station WD22TB4",
-    date: "12 Jul 2026", units: 4, requestedBy: "Nour Adel",
-    department: "IT Operations", total: 6480.0,
-    shippingAddress: "ITWorx Smart Village, Building B12, Giza, Egypt",
-    carrier: "Aramex Business", trackingNumber: "AWX-88213904",
-    notes: "Docking stations to be pre-configured with dual-monitor profiles before handover.",
-    lineItems: [
-      { name: "Dell Latitude 5550 Laptop", qty: 4, unitPrice: 1350.0 },
-      { name: "Docking Station WD22TB4", qty: 4, unitPrice: 270.0 },
-    ],
-    timeline: [
-      { label: "Order placed", date: "28 Jun 2026" },
-      { label: "Processing", date: "30 Jun 2026" },
-      { label: "Shipped", date: "07 Jul 2026" },
-      { label: "Delivered", date: "12 Jul 2026" },
-    ],
-  },
-  {
-    id: "ORD-24796", status: "Processing",
-    title: "Microsoft 365 E3 licences (annual renewal)",
-    date: "04 Jul 2026", units: 25, requestedBy: "Karim Fahmy",
-    department: "IT Procurement", total: 10950.0,
-    shippingAddress: "Digital delivery — no physical shipment",
-    carrier: "—", trackingNumber: "—",
-    notes: "Annual renewal for the Engineering and Design teams.",
-    lineItems: [{ name: "Microsoft 365 E3 licence (1 yr)", qty: 25, unitPrice: 438.0 }],
-    timeline: [
-      { label: "Order placed", date: "04 Jul 2026" },
-      { label: "Processing", date: "04 Jul 2026" },
-      { label: "Shipped", date: null },
-      { label: "Delivered", date: null },
-    ],
-  },
-  {
-    id: "ORD-24755", status: "Shipped",
-    title: "Logitech MX Master 3S · Keyboard MX Keys",
-    date: "22 Jun 2026", units: 12, requestedBy: "Salma Hassan",
-    department: "People & Workplace", total: 1740.0,
-    shippingAddress: "ITWorx Maadi Office, 3rd Floor, Cairo, Egypt",
-    carrier: "Bosta", trackingNumber: "BST-55210871",
-    notes: "For new hires starting next onboarding cohort.",
-    lineItems: [
-      { name: "Logitech MX Master 3S Mouse", qty: 6, unitPrice: 110.0 },
-      { name: "Logitech MX Keys Keyboard", qty: 6, unitPrice: 180.0 },
-    ],
-    timeline: [
-      { label: "Order placed", date: "15 Jun 2026" },
-      { label: "Processing", date: "17 Jun 2026" },
-      { label: "Shipped", date: "22 Jun 2026" },
-      { label: "Delivered", date: null },
-    ],
-  },
-  {
-    id: "ORD-24710", status: "Delivered",
-    title: "Jabra Evolve2 65 Headsets",
-    date: "09 Jun 2026", units: 8, requestedBy: "Omar Zaki",
-    department: "Customer Support", total: 1992.0,
-    shippingAddress: "ITWorx Smart Village, Building B12, Giza, Egypt",
-    carrier: "Aramex Business", trackingNumber: "AWX-87765102",
-    notes: "Replacement units for support desk agents.",
-    lineItems: [{ name: "Jabra Evolve2 65 Headset", qty: 8, unitPrice: 249.0 }],
-    timeline: [
-      { label: "Order placed", date: "28 May 2026" },
-      { label: "Processing", date: "30 May 2026" },
-      { label: "Shipped", date: "04 Jun 2026" },
-      { label: "Delivered", date: "09 Jun 2026" },
-    ],
-  },
-  {
-    id: "ORD-24688", status: "Cancelled",
-    title: "Ubiquiti UniFi 6 Pro Access Points",
-    date: "28 May 2026", units: 6, requestedBy: "Mariam Sobhy",
-    department: "Network Infrastructure", total: 1134.0,
-    shippingAddress: "ITWorx Smart Village, Building B12, Giza, Egypt",
-    carrier: "—", trackingNumber: "—",
-    notes: "Cancelled — replaced by a bulk order under ORD-24820.",
-    lineItems: [{ name: "Ubiquiti UniFi 6 Pro Access Point", qty: 6, unitPrice: 189.0 }],
-    timeline: [
-      { label: "Order placed", date: "20 May 2026" },
-      { label: "Processing", date: "22 May 2026" },
-      { label: "Cancelled", date: "28 May 2026" },
-    ],
-  },
-];
 
 function currency(n) {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -154,7 +63,7 @@ function tsLabel(ts) {
 /* ---------- shared small pieces ---------- */
 
 function StatusBadge({ status }) {
-  const s = STATUS_STYLES[status];
+  const s = STATUS_STYLES[status] || STATUS_STYLES.Processing;
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 6,
@@ -242,9 +151,11 @@ function OrderRow({ order, onViewDetails, onReorder, onCancel }) {
           <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: COLORS.white }}>{currency(order.total)}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <HoverButton primary onClick={() => onReorder(order)}>
-            <RotateCcw size={14} /> Reorder
-          </HoverButton>
+          {order.kind !== "preorder" && (
+            <HoverButton primary onClick={() => onReorder(order)}>
+              <RotateCcw size={14} /> Reorder
+            </HoverButton>
+          )}
           <HoverButton onClick={() => onViewDetails(order)}>View details</HoverButton>
           {isCancellable && (
             <HoverButton danger onClick={() => onCancel(order)}>
@@ -384,9 +295,11 @@ function OrderDetailsPage({ order, onBack, onReorder, onCancel }) {
               <Ban size={14} /> Cancel order
             </HoverButton>
           )}
-          <HoverButton primary onClick={() => onReorder(order)}>
-            <RotateCcw size={14} /> Reorder
-          </HoverButton>
+          {order.kind !== "preorder" && (
+            <HoverButton primary onClick={() => onReorder(order)}>
+              <RotateCcw size={14} /> Reorder
+            </HoverButton>
+          )}
         </div>
       </div>
 
@@ -619,30 +532,23 @@ function CancelOrderModal({ order, onClose, onConfirm }) {
 
 /* ---------- page ---------- */
 
-function withAuditDefaults(order, index) {
-  // Approximate a createdAt for seed data from its own date label so the
-  // existing orders sort correctly relative to anything created live.
-  const parsed = Date.parse(order.date);
-  const createdAt = Number.isFinite(parsed) ? parsed : Date.now() - index * 86400000;
-  return {
-    ...order,
-    createdAt,
-    activityLog: order.activityLog || [
-      { action: "Order created", by: order.requestedBy, at: createdAt },
-    ],
-  };
-}
+const TABS = [
+  { key: "ordered", label: "Ordered" },
+  { key: "preorder", label: "Pre-Orders" },
+];
 
 export default function OrdersPage() {
-  const [orders, setOrders] = useState(() => DEFAULT_ORDERS.map(withAuditDefaults));
+  const { user } = useAuth();
+  const actingUser = user?.name || "You";
+  const { orders, createManualOrder, reorder, cancelOrder } = useOrders();
+
+  const [activeTab, setActiveTab] = useState("ordered");
   const [activeFilter, setActiveFilter] = useState("All");
   const [query, setQuery] = useState("");
-  const [activeNav, setActiveNav] = useState("Orders");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [toast, setToast] = useState(null);
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
-  const [currentUser, setCurrentUser] = useState("You");
 
   useEffect(() => {
     if (!toast) return;
@@ -650,169 +556,103 @@ export default function OrdersPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  function nextOrderId() {
-    const maxNum = orders.reduce((max, o) => {
-      const n = parseInt(o.id.replace("ORD-", ""), 10);
-      return Number.isFinite(n) ? Math.max(max, n) : max;
-    }, 0);
-    return `ORD-${maxNum + 1}`;
-  }
-
   function handleReorder(order) {
-    const newId = nextOrderId();
-    const now = Date.now();
-    const newOrder = {
-      ...order, id: newId, status: "Processing", date: tsLabel(now), createdAt: now,
-      notes: `Reordered from ${order.id}.`,
-      activityLog: [{ action: `Order created (reordered from ${order.id})`, by: currentUser, at: now }],
-      timeline: [
-        { label: "Order placed", date: todayLabel() },
-        { label: "Processing", date: todayLabel() },
-        { label: "Shipped", date: null },
-        { label: "Delivered", date: null },
-      ],
-    };
-    setOrders((prev) => [
-      newOrder,
-      ...prev.map((o) =>
-        o.id === order.id
-          ? { ...o, activityLog: [...o.activityLog, { action: `Reordered as ${newId}`, by: currentUser, at: now }] }
-          : o
-      ),
-    ]);
-    setToast(`Reorder placed — ${newId} created from ${order.id}`);
+    const newOrder = reorder(order, actingUser);
+    setToast(`Reorder placed — ${newOrder.id} created from ${order.id}`);
     setSelectedOrder(null);
     setActiveFilter("All");
+    setActiveTab("ordered");
   }
 
   function handleCreateOrder(formData) {
-    const newId = nextOrderId();
-    const now = Date.now();
-    const newOrder = {
-      id: newId, status: "Processing", title: formData.title, date: tsLabel(now), createdAt: now,
-      units: formData.units, requestedBy: formData.requestedBy, department: formData.department,
-      total: formData.total, shippingAddress: formData.shippingAddress,
-      carrier: "—", trackingNumber: "—", notes: formData.notes, lineItems: formData.lineItems,
-      activityLog: [{ action: "Order created", by: formData.requestedBy, at: now }],
-      timeline: [
-        { label: "Order placed", date: todayLabel() },
-        { label: "Processing", date: todayLabel() },
-        { label: "Shipped", date: null },
-        { label: "Delivered", date: null },
-      ],
-    };
-    setOrders((prev) => [newOrder, ...prev]);
-    setToast(`New order placed — ${newId}`);
+    const newOrder = createManualOrder(formData, actingUser);
+    setToast(`New order placed — ${newOrder.id}`);
     setShowNewOrderModal(false);
     setActiveFilter("All");
+    setActiveTab("ordered");
   }
 
   function handleCancelOrder(order) {
-    const now = Date.now();
-    const today = todayLabel();
-    const completedSteps = order.timeline.filter((s) => s.date && s.label !== "Cancelled");
-    const updated = {
-      status: "Cancelled",
-      notes: `Cancelled on ${today}. ${order.notes || ""}`.trim(),
-      timeline: [...completedSteps, { label: "Cancelled", date: today }],
-      activityLog: [...order.activityLog, { action: "Order cancelled", by: currentUser, at: now }],
-    };
-    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...updated } : o)));
+    const updated = cancelOrder(order, actingUser);
     setToast(`${order.id} has been cancelled`);
     setCancelTarget(null);
     setSelectedOrder((prev) => (prev && prev.id === order.id ? { ...prev, ...updated } : prev));
   }
 
+  const tabOrders = useMemo(
+    () => orders.filter((o) => (activeTab === "preorder" ? o.kind === "preorder" : o.kind !== "preorder")),
+    [orders, activeTab]
+  );
+
   const filteredOrders = useMemo(() => {
-    return orders
+    return tabOrders
       .filter((o) => {
-        const matchesFilter = activeFilter === "All" || o.status === activeFilter;
+        const matchesFilter = activeTab === "preorder" || activeFilter === "All" || o.status === activeFilter;
         const q = query.trim().toLowerCase();
         const matchesQuery = !q || o.id.toLowerCase().includes(q) || o.title.toLowerCase().includes(q) || o.requestedBy.toLowerCase().includes(q);
         return matchesFilter && matchesQuery;
       })
       .sort((a, b) => b.createdAt - a.createdAt);
-  }, [orders, activeFilter, query]);
+  }, [tabOrders, activeFilter, query, activeTab]);
 
-  const awaitingDelivery = orders.filter((o) => ["Processing", "Shipped"].includes(o.status)).length;
-  const spendToDate = orders.reduce((sum, o) => sum + o.total, 0);
+  const orderedOrders = useMemo(() => orders.filter((o) => o.kind !== "preorder"), [orders]);
+  const preOrderCount = orders.length - orderedOrders.length;
+  const awaitingDelivery = orderedOrders.filter((o) => ["Processing", "Shipped"].includes(o.status)).length;
+  const spendToDate = orderedOrders.reduce((sum, o) => sum + o.total, 0);
 
   return (
-    <div style={{ minHeight: "100vh", width: "100%", display: "flex", background: COLORS.ink, color: COLORS.white, fontFamily: FONT }}>
-      {/* Sidebar */}
-      <aside style={{ width: 220, flexShrink: 0, padding: "20px 16px", background: COLORS.ink, borderRight: `1px solid ${COLORS.line}`, display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px", marginBottom: 32 }}>
-          <PanelLeft size={18} color={COLORS.greyDim} />
-          <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15 }}>
-            <span style={{ color: COLORS.white }}>IT</span><span style={{ color: COLORS.red }}>Worx</span>
-          </span>
-        </div>
-        <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.greyDim, padding: "0 12px", marginBottom: 8 }}>
-          Categories
-        </div>
-        <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {NAV_ITEMS.map(({ label, icon: Icon }) => {
-            const isActive = activeNav === label;
-            return (
-              <button
-                key={label}
-                onClick={() => setActiveNav(label)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10, borderRadius: 8, padding: "8px 12px",
-                  fontFamily: FONT, fontSize: 14, textAlign: "left", cursor: "pointer", border: "none",
-                  background: isActive ? COLORS.panelHi : "transparent", color: isActive ? COLORS.white : COLORS.greyDim,
-                }}
-              >
-                <Icon size={16} /> {label}
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
-
-      {/* Main */}
-      <main style={{ flex: 1, padding: "32px 40px" }}>
-        {selectedOrder ? (
-          <OrderDetailsPage
-            order={selectedOrder}
-            onBack={() => setSelectedOrder(null)}
-            onReorder={handleReorder}
-            onCancel={setCancelTarget}
-          />
-        ) : (
-          <div style={{ maxWidth: 1200 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-              <div>
-                <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.red, marginBottom: 8 }}>
-                  ITWorx SupportDesk
-                </div>
-                <h1 style={{ fontFamily: FONT, fontSize: 28, fontWeight: 700, color: COLORS.white, margin: 0 }}>Previous orders</h1>
-                <p style={{ fontFamily: FONT, fontSize: 14, color: COLORS.greyDim, maxWidth: 420, marginTop: 8 }}>
-                  Every hardware, licence and accessory request you have raised, with live fulfilment status.
-                </p>
+    <div style={{ minHeight: "100vh", width: "100%", background: COLORS.ink, color: COLORS.white, fontFamily: FONT, padding: "32px 40px" }}>
+      {selectedOrder ? (
+        <OrderDetailsPage
+          order={selectedOrder}
+          onBack={() => setSelectedOrder(null)}
+          onReorder={handleReorder}
+          onCancel={setCancelTarget}
+        />
+      ) : (
+        <div style={{ maxWidth: 1200 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.red, marginBottom: 8 }}>
+                ITWorx SupportDesk
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.greyDim }}>
-                    Acting as
-                  </span>
-                  <input
-                    value={currentUser}
-                    onChange={(e) => setCurrentUser(e.target.value || "You")}
-                    style={{ ...inputStyle, width: 140, padding: "8px 10px" }}
-                  />
-                </label>
-                <HoverButton primary onClick={() => setShowNewOrderModal(true)}>New order</HoverButton>
-              </div>
+              <h1 style={{ fontFamily: FONT, fontSize: 28, fontWeight: 700, color: COLORS.white, margin: 0 }}>Orders</h1>
+              <p style={{ fontFamily: FONT, fontSize: 14, color: COLORS.greyDim, maxWidth: 420, marginTop: 8 }}>
+                Every hardware, licence and accessory request you have raised, plus anything pre-ordered while out of stock.
+              </p>
             </div>
+            <HoverButton primary onClick={() => setShowNewOrderModal(true)}>New order</HoverButton>
+          </div>
 
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-              <StatCard label="Orders this year" value={orders.length + 33} />
-              <StatCard label="Spend to date" value={currency(spendToDate)} />
-              <StatCard label="Awaiting delivery" value={awaitingDelivery} valueColor={COLORS.yellow} />
-            </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+            {TABS.map((t) => {
+              const isActive = activeTab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  style={{
+                    borderRadius: 10, padding: "9px 18px", fontFamily: FONT, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                    border: isActive ? `1px solid ${COLORS.red}` : `1px solid ${COLORS.line}`,
+                    color: isActive ? COLORS.white : COLORS.grey,
+                    background: isActive ? "rgba(198,53,39,0.14)" : "transparent",
+                  }}
+                >
+                  {t.label}{t.key === "preorder" && preOrderCount > 0 ? ` (${preOrderCount})` : ""}
+                </button>
+              );
+            })}
+          </div>
 
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 20 }}>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
+            <StatCard label="Orders this year" value={orderedOrders.length + 33} />
+            <StatCard label="Spend to date" value={currency(spendToDate)} />
+            <StatCard label="Awaiting delivery" value={awaitingDelivery} valueColor={COLORS.yellow} />
+            <StatCard label="Pre-orders pending" value={preOrderCount} valueColor="#5FD6E0" />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 20 }}>
+            {activeTab === "ordered" ? (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {FILTERS.map((f) => {
                   const isActive = activeFilter === f;
@@ -832,31 +672,33 @@ export default function OrdersPage() {
                   );
                 })}
               </div>
-              <div style={{ position: "relative" }}>
-                <Search size={15} color={COLORS.greyDim} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search orders..."
-                  style={{ ...inputStyle, width: 220, paddingLeft: 36 }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 40 }}>
-              {filteredOrders.length > 0 ? (
-                filteredOrders.map((order) => (
-                  <OrderRow key={order.id} order={order} onViewDetails={setSelectedOrder} onReorder={handleReorder} onCancel={setCancelTarget} />
-                ))
-              ) : (
-                <Panel style={{ textAlign: "center", color: COLORS.greyDim, padding: "40px 20px" }}>
-                  No orders match this filter or search.
-                </Panel>
-              )}
+            ) : <div />}
+            <div style={{ position: "relative" }}>
+              <Search size={15} color={COLORS.greyDim} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search orders..."
+                style={{ ...inputStyle, width: 220, paddingLeft: 36 }}
+              />
             </div>
           </div>
-        )}
-      </main>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 40 }}>
+            {filteredOrders.length > 0 ? (
+              filteredOrders.map((order) => (
+                <OrderRow key={order.id} order={order} onViewDetails={setSelectedOrder} onReorder={handleReorder} onCancel={setCancelTarget} />
+              ))
+            ) : (
+              <Panel style={{ textAlign: "center", color: COLORS.greyDim, padding: "40px 20px" }}>
+                {activeTab === "preorder"
+                  ? "No pre-orders yet — order an out-of-stock product from the catalog to see it here."
+                  : "No orders match this filter or search."}
+              </Panel>
+            )}
+          </div>
+        </div>
+      )}
 
       {showNewOrderModal && <NewOrderModal onClose={() => setShowNewOrderModal(false)} onCreate={handleCreateOrder} />}
       {cancelTarget && <CancelOrderModal order={cancelTarget} onClose={() => setCancelTarget(null)} onConfirm={handleCancelOrder} />}

@@ -111,3 +111,13 @@ export const FooterText = styled.p`
   font-size: 13px;
   color: ${({ theme }) => theme.colors.textMuted};
 `;
+
+export const FormError = styled.div`
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: ${({ theme }) => theme.radii.sm};
+  border: 1px solid ${({ theme }) => theme.colors.danger};
+  background: ${({ theme }) => theme.colors.danger}1a;
+  color: ${({ theme }) => theme.colors.danger};
+  font-size: 13px;
+`;

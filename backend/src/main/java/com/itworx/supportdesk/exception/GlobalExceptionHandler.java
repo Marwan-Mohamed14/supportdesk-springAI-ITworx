@@ -26,6 +26,11 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Duplicate SKU", ex.getMessage());
     }
 
+    @ExceptionHandler(DuplicateEmailException.class)
+    public ProblemDetail handleDuplicateEmail(DuplicateEmailException ex) {
+        return problem(HttpStatus.CONFLICT, "Duplicate Email", ex.getMessage());
+    }
+
     @ExceptionHandler(InvalidProductStateException.class)
     public ProblemDetail handleInvalidState(InvalidProductStateException ex) {
         return problem(HttpStatus.BAD_REQUEST, "Invalid Request", ex.getMessage());

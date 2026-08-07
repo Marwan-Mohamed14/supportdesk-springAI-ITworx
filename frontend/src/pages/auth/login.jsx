@@ -1,14 +1,16 @@
 import { Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import AuthLayout from '../../components/auth/AuthLayout.jsx';
 import AuthTabs from '../../components/auth/AuthTabs.jsx';
 import FormField from '../../components/auth/FormField.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import {
   CheckboxRow,
   Divider,
   FooterText,
   Form,
+  FormError,
   GhostButton,
   Heading,
   InlineLink,
@@ -17,14 +19,28 @@ import {
 } from '../../components/auth/AuthElements.jsx';
 
 function Login() {
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [keepSignedIn, setKeepSignedIn] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    // TODO: wire up to the auth API once the backend endpoint is available.
+    setFormError('');
+    setSubmitting(true);
+    try {
+      const response = await login(email, password);
+      navigate(response.roles?.includes('ADMIN') ? '/admin' : '/products', { replace: true });
+    } catch (error) {
+      setFormError(error.message || 'Unable to sign in. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -37,6 +53,8 @@ function Login() {
       <AuthTabs active="login" />
 
       <Form onSubmit={handleSubmit}>
+        {formError && <FormError>{formError}</FormError>}
+
         <FormField
           id="email"
           label="Work email"
@@ -75,7 +93,9 @@ function Login() {
           Keep me signed in on this device
         </CheckboxRow>
 
-        <PrimaryButton type="submit">Sign in</PrimaryButton>
+        <PrimaryButton type="submit" disabled={submitting}>
+          {submitting ? 'Signing in…' : 'Sign in'}
+        </PrimaryButton>
       </Form>
 
       <Divider>OR</Divider>

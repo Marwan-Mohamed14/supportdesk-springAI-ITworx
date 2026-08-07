@@ -1,13 +1,15 @@
 import { Eye, EyeOff, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import AuthLayout from '../../components/auth/AuthLayout.jsx';
 import AuthTabs from '../../components/auth/AuthTabs.jsx';
 import FormField from '../../components/auth/FormField.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import {
   Divider,
   FooterText,
   Form,
+  FormError,
   GhostButton,
   Heading,
   InlineLink,
@@ -16,23 +18,38 @@ import {
 } from '../../components/auth/AuthElements.jsx';
 
 function Signup() {
+  const { register } = useAuth();
+  const navigate = useNavigate();
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [confirmError, setConfirmError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    setFormError('');
 
     if (password !== confirmPassword) {
       setConfirmError('Passwords do not match.');
       return;
     }
-
     setConfirmError('');
-    // TODO: wire up to the auth API once the backend endpoint is available.
+
+    setSubmitting(true);
+    try {
+      await register(name, email, password);
+      // New signups are always CUSTOMER, so straight to the shopping view.
+      navigate('/products', { replace: true });
+    } catch (error) {
+      setFormError(error.message || 'Unable to create your account. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -45,6 +62,8 @@ function Signup() {
       <AuthTabs active="signup" />
 
       <Form onSubmit={handleSubmit}>
+        {formError && <FormError>{formError}</FormError>}
+
         <FormField
           id="name"
           label="Full name"
@@ -100,7 +119,9 @@ function Signup() {
           required
         />
 
-        <PrimaryButton type="submit">Create account</PrimaryButton>
+        <PrimaryButton type="submit" disabled={submitting}>
+          {submitting ? 'Creating account…' : 'Create account'}
+        </PrimaryButton>
       </Form>
 
       <Divider>OR</Divider>
