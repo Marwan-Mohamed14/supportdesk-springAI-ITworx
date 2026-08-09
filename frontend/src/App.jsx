@@ -8,6 +8,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import Login from './pages/auth/login.jsx';
 import Signup from './pages/auth/signup.jsx';
 import OrdersPage from './pages/orders/orders.jsx';
+import AgentDashboard from './pages/agent/dashboard.jsx';
 import TicketsPage from './pages/tickets/tickets.jsx';
 import ProductCatalogPage from './pages/products/catalog.jsx';
 import ProductDetail from './pages/products/ProductDetail.jsx';
@@ -38,6 +39,14 @@ function App() {
             </ProtectedRoute>
           }
         >
+          <Route
+            path="/agent"
+            element={
+              <ProtectedRoute allowedRoles={["AGENT"]}>
+                <AgentDashboard />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/products" element={<ProductCatalogPage />} />
           <Route path="/products/:id" element={<ProductDetail />} />
           <Route path="/tickets" element={<TicketsPage />} />
