@@ -98,3 +98,36 @@ export const assignTicket = (token, id, agentId) =>
 // POST /tickets/{id}/escalate  body: {reason}
 export const escalateTicket = (token, id, reason) =>
   request(`/tickets/${id}/escalate`, { method: 'POST', body: { reason }, token });
+
+/* ---------------- Chatbot (RAG) — /api/notes ---------------- */
+// POST /api/notes/ask  body: {question} -> returns a plain-text answer (not JSON),
+// so this bypasses request()'s JSON-response handling.
+export async function askChatbot(token, question) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/notes/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ question }),
+    });
+  } catch {
+    throw new ApiError('Could not reach the assistant. Please try again.', { status: 0 });
+  }
+
+  const text = await response.text();
+
+  if (!response.ok) {
+    // Auth/validation failures come back as ProblemDetail JSON; anything else
+    // (e.g. an unhandled exception) comes back as plain text or an HTML error page.
+    let message = `Request failed (${response.status})`;
+    try {
+      const data = JSON.parse(text);
+      message = data?.detail || data?.title || message;
+    } catch {
+      if (text) message = text;
+    }
+    throw new ApiError(message, { status: response.status });
+  }
+
+  return text;
+}

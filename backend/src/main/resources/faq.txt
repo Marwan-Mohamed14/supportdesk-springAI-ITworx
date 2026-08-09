@@ -1,0 +1,197 @@
+Q: I placed an order but never received a confirmation email. What should I do?
+A: First check your spam or promotions folder, since confirmation emails are sometimes filtered there. If it's still missing after 30 minutes, log into your account and check the Order History section to confirm the order actually went through. If you see the order listed but no email arrived, contact support with your order number and we'll resend the confirmation.
+
+Q: How long does it take for an order to be processed before shipping?
+A: Orders are typically processed within 1 to 2 business days before being handed off to the courier. During high-demand periods such as holidays or promotional sales, processing can take up to 4 business days. You'll receive a shipping confirmation email with tracking details once the order leaves the warehouse.
+
+Q: Can I change my shipping address after placing an order?
+A: You can change the shipping address only if the order has not yet entered the "Processing" stage. Go to Order History, select the order, and choose Edit Shipping Details. If the order has already moved to Processing or Shipped status, the address can no longer be changed and you'll need to contact support to redirect the package if possible.
+
+Q: My order shows as delivered but I never received it. What now?
+A: First check with neighbors or a building reception/mailroom, since couriers sometimes leave packages there. Also verify the delivery address on the order matches where you expected it. If the package genuinely can't be located, contact support within 48 hours of the delivered status so we can open an investigation with the courier and process a replacement or refund if appropriate.
+
+Q: Can I cancel an order after it has shipped?
+A: Once an order has shipped, it can no longer be cancelled. Instead, you can refuse the delivery when it arrives, or accept it and initiate a standard return once it's in hand. Orders can only be cancelled while still in "Pending" or "Processing" status.
+
+Q: Why was my order automatically cancelled?
+A: Orders are automatically cancelled if payment authorization fails, if the billing and shipping information can't be verified, or if an item goes out of stock before the order is processed. Check your email for a cancellation notice explaining the specific reason, or contact support with your order number for details.
+
+Q: Can I combine two separate orders into one shipment?
+A: Orders cannot be merged once placed, even if placed minutes apart, because each one enters the fulfillment system separately. If both orders haven't shipped yet, contact support and we can attempt to combine them manually, though this isn't guaranteed depending on warehouse processing status.
+
+Q: Do you offer expedited or same-day shipping?
+A: Expedited shipping is available at checkout for most locations, typically arriving in 1-2 business days for an additional fee. Same-day delivery is only available in select metro areas and must be selected at checkout before 12 PM local time to qualify.
+
+Q: I was charged twice for the same order. What happened?
+A: This is usually a temporary authorization hold rather than an actual double charge — many banks place a pending charge during checkout that disappears within 3-5 business days once the real transaction settles. If both charges are still showing as completed (not pending) after 5 business days, contact support with both transaction IDs so we can investigate and refund the duplicate.
+
+Q: Why is my order stuck in "Processing" for several days?
+A: Extended processing usually means an item in the order is on backorder, there's a payment verification hold, or the warehouse is experiencing high volume. Check the order details page for a specific note, or contact support with the order number if it's been more than 5 business days with no status update.
+
+Q: What is your standard return policy?
+A: Most items can be returned within 30 days of delivery, provided they are unused, in original packaging, and include all accessories and documentation. Certain categories like opened software, personalized items, and clearance products are final sale and not eligible for return.
+
+Q: How long does it take to receive a refund after a return?
+A: Once we receive and inspect the returned item, refunds are typically processed within 3-5 business days. Depending on your bank or card issuer, it may take an additional 5-10 business days for the refund to appear on your statement.
+
+Q: Can I get a refund without returning the item?
+A: Refunds without a physical return are only granted in specific cases, such as a defective item where return shipping isn't required, a lost package confirmed by the courier, or an order that never arrived. In most other cases, the item must be returned before a refund is issued.
+
+Q: My item arrived damaged. Do I still have to pay for return shipping?
+A: No. If an item arrives damaged, defective, or incorrect, return shipping is free and we'll provide a prepaid shipping label. Contact support with photos of the damage and your order number so we can generate the label and process a replacement or refund.
+
+Q: Can I exchange an item instead of getting a refund?
+A: Yes, exchanges are available for items that are the wrong size, color, or model, provided the item is unused and within the 30-day return window. Select "Exchange" instead of "Refund" when starting the return process, and specify the replacement item you'd like.
+
+Q: What happens if I miss the 30-day return window?
+A: Items returned after 30 days are generally not eligible for a refund, but may qualify for store credit at our discretion depending on the item's condition and circumstances. Contact support to explain your situation and we'll advise on available options.
+
+Q: Do I get a refund for the original shipping cost?
+A: Original shipping charges are refunded only if the return is due to our error — meaning a defective, damaged, or incorrect item. For returns made simply because you changed your mind, the original shipping cost is non-refundable, though the return shipping label cost may still apply depending on the method chosen.
+
+Q: Can I return a gift without the original receipt?
+A: Yes, gift returns can be processed using the order confirmation email or gift receipt if available. Without any proof of purchase, we can often still look up the order using the recipient's name and approximate purchase date, though refunds in this case are usually issued as store credit rather than to the original payment method.
+
+Q: My refund was approved but I still don't see the money. What should I check?
+A: First confirm the refund was issued to the original payment method by checking your order status page, since it should show a "Refunded" label with a date. If it's been more than 10 business days since that date, contact your bank directly, as delays at this stage are usually on their end rather than ours.
+
+Q: Is there a restocking fee for returns?
+A: Most items do not carry a restocking fee. However, large appliances, opened electronics, and certain bulk or industrial items may carry a restocking fee of up to 15%, which will be clearly disclosed on the product page and during the return process before you confirm.
+
+Q: What payment methods do you accept?
+A: We accept major credit and debit cards, PayPal, and in most regions, direct bank transfers and buy-now-pay-later services. Available options are shown at checkout and may vary depending on your shipping country.
+
+Q: Why was my payment declined?
+A: Declines usually happen due to insufficient funds, an expired card, incorrect billing address entered at checkout, or your bank flagging the transaction for fraud review. Try re-entering your card details carefully, or contact your bank to confirm the transaction wasn't blocked on their end before retrying.
+
+Q: Can I use multiple payment methods for one order?
+A: Split payments across two different cards or payment methods are not currently supported for a single order. You can, however, apply a single gift card or store credit balance alongside one primary payment method.
+
+Q: How do I update my saved payment information?
+A: Go to Account Settings, then Payment Methods, where you can add, edit, or remove saved cards. Note that updating payment info here does not automatically update it on any subscription or recurring order already in progress — those need to be updated separately.
+
+Q: Will I be charged sales tax?
+A: Sales tax is calculated based on your shipping address and applicable local regulations, and is added at checkout before you confirm payment. The exact amount is shown on the order summary before you complete the purchase.
+
+Q: I was charged in the wrong currency. What happened?
+A: This typically happens when your card issuer performs a dynamic currency conversion rather than us charging in a different currency directly. Check your bank statement for a conversion fee line — if the base charge matches our listed price in our operating currency, this is expected behavior from your bank, not a billing error on our end.
+
+Q: I forgot my password. How do I reset it?
+A: Click "Forgot Password" on the login page and enter the email associated with your account. You'll receive a reset link valid for 24 hours. If the email doesn't arrive within a few minutes, check spam or verify you're using the correct email address.
+
+Q: Why does it say my email is already registered when I try to sign up?
+A: This means an account already exists under that email, possibly created during a previous purchase as a guest checkout. Try the "Forgot Password" option instead of creating a new account, which will let you set a new password and access your existing order history.
+
+Q: Can I merge two accounts I accidentally created?
+A: Accounts cannot be automatically merged, but support can manually transfer order history from one account to another upon request. Contact support with both email addresses and we'll consolidate the history into whichever account you'd like to keep.
+
+Q: How do I delete my account permanently?
+A: Go to Account Settings, then Privacy, and select "Delete Account." Note this action is irreversible and will remove your saved addresses, payment methods, and order history from active view, though some records may be retained for a period as required by law or for tax/refund purposes.
+
+Q: I'm not receiving two-factor authentication codes. What should I do?
+A: First check that your phone has signal and that the number on file is correct under Account Settings. If codes still aren't arriving after a few minutes, use the backup codes provided when you first set up 2FA, or contact support to verify your identity and temporarily disable 2FA so you can log back in.
+
+Q: My laptop won't turn on at all. What should I check first?
+A: Start by confirming the charger is plugged into a working outlet and the charging light on the laptop turns on when connected. If there's no light at all, try a different outlet and cable if available. If the charging light is on but the laptop still won't power on, hold the power button for 15-20 seconds to force a hard reset, then try powering on again.
+
+Q: My laptop turns on but the screen stays black.
+A: This is often a display or graphics driver issue rather than a full hardware failure. Try connecting the laptop to an external monitor — if the external display works, the internal screen or its cable may be faulty and needs a repair. If neither display shows anything, it's more likely a motherboard or RAM issue requiring service.
+
+Q: My laptop battery drains extremely fast even when idle.
+A: Check Task Manager or Activity Monitor for background processes consuming high CPU, since runaway processes are a common cause. Also check your power plan settings, as a "High Performance" mode drains battery faster than "Balanced" or "Power Saver." If battery health reports show significant degradation (below 80% of original capacity), the battery itself may need replacement.
+
+Q: My laptop is overheating and shutting down randomly.
+A: This is typically caused by dust buildup blocking the internal fans and vents, especially in laptops over 1-2 years old. Use compressed air to clear the vents while powered off, and ensure the laptop is used on a hard, flat surface rather than a bed or couch that blocks airflow. If overheating continues after cleaning, the thermal paste may need reapplication, which usually requires a technician.
+
+Q: The keyboard on my laptop has stopped working, but only certain keys.
+A: Partial keyboard failure is often caused by a specific key row or ribbon connector issue rather than a full keyboard failure. Try an external USB keyboard to confirm whether the issue is with the laptop's keyboard hardware or a software/driver problem. If an external keyboard works fine, the internal keyboard likely needs physical repair or replacement.
+
+Q: My laptop is running much slower than when I first bought it.
+A: Slowdowns over time are commonly caused by too many startup programs, a nearly-full hard drive, or accumulated background processes. Check available storage space first, since performance degrades significantly when a drive is over 90% full. Also review startup applications in Task Manager and disable ones you don't need running constantly.
+
+Q: My laptop screen has strange lines or flickering.
+A: Flickering or lines across the screen usually points to either a loose display cable connection or a failing graphics component. Try adjusting the screen angle slowly — if the flickering changes with the angle, it's likely a loose cable connection. If it persists regardless of angle, it may be a panel or GPU issue requiring hardware service.
+
+Q: How do I know if my laptop's warranty is still valid?
+A: Check the original purchase receipt or order confirmation for the purchase date, then compare it against your product's warranty length listed on the product page (typically 1-2 years standard). You can also enter your device's serial number on the manufacturer's support site, which will display remaining warranty coverage directly.
+
+Q: My laptop won't connect to Wi-Fi even though other devices can.
+A: First toggle Wi-Fi off and on, and if that doesn't help, restart the laptop entirely since this resolves most temporary networking glitches. Check that airplane mode is off and that the Wi-Fi adapter isn't disabled in Device Manager. If the adapter shows an error or missing driver, reinstalling the network driver from the manufacturer's site usually resolves it.
+
+Q: My laptop makes a loud clicking or grinding noise.
+A: This is a serious warning sign, especially if your laptop has a traditional hard drive rather than an SSD, as clicking noises often indicate imminent hard drive failure. Back up your important data immediately if you haven't already, and avoid continuing to use the laptop heavily until the drive can be inspected or replaced.
+
+Q: The industrial control panel is showing an error code but no description. What should I do?
+A: Cross-reference the error code against the device's technical manual, usually found in the troubleshooting appendix, as codes are standardized per model. If the manual isn't available, note the exact code and contact support, since we maintain a full error code reference for supported industrial equipment.
+
+Q: Our PLC (programmable logic controller) stopped responding to commands.
+A: First check the physical connection between the PLC and the controlling system, including Ethernet or serial cables, since a loose connection is a common cause. Also verify the PLC's status LEDs — a solid red or amber light usually indicates a fault state requiring a manual reset per the device's restart procedure.
+
+Q: How often should industrial sensors be recalibrated?
+A: Recalibration frequency depends on the sensor type and operating environment, but as a general guideline, most industrial sensors should be recalibrated every 6-12 months, or immediately after any physical impact, power surge, or significant environmental change. Check your specific device's documentation for manufacturer-recommended intervals.
+
+Q: Our equipment keeps tripping the circuit breaker.
+A: Repeated tripping usually indicates the equipment is drawing more current than the circuit is rated for, a short circuit somewhere in the wiring, or a failing component causing a power surge. Do not simply keep resetting the breaker repeatedly, as this can be a fire risk — instead, have a qualified electrician inspect the circuit and the equipment's power draw.
+
+Q: What's the expected lifespan of industrial-grade electronic components compared to consumer-grade?
+A: Industrial-grade components are typically rated for a significantly longer operational lifespan than consumer-grade equivalents, often 50,000+ hours of continuous operation compared to a few thousand hours for consumer parts, due to more robust manufacturing tolerances and thermal management. Actual lifespan still depends heavily on operating conditions like temperature, humidity, and duty cycle.
+
+Q: Our device's firmware update failed halfway through. What now?
+A: Do not power off the device, as this can corrupt the firmware and potentially brick it. Most industrial devices have a recovery or bootloader mode specifically for this scenario — check the manual for the recovery procedure, which usually involves a specific button combination on startup. If the device is unresponsive even in recovery mode, contact support immediately.
+
+Q: How do I request a replacement part for discontinued industrial equipment?
+A: Contact support with the device's model number and serial number, and we'll check whether compatible replacement parts are still available either from inventory or from third-party certified suppliers. For fully discontinued lines, we can sometimes recommend an approved upgrade path to a current model with similar specifications.
+
+Q: What's the difference between a warranty claim and a service contract repair for industrial equipment?
+A: A warranty claim covers manufacturing defects within the original warranty period at no cost, provided the equipment hasn't been damaged by misuse or unauthorized modification. A service contract is a separately purchased agreement that covers ongoing maintenance, wear-and-tear repairs, and often priority response times beyond what the standard warranty includes.
+
+Q: Our humidity sensor readings seem inaccurate compared to a handheld reference device.
+A: Sensor drift over time is common in continuously-operating environmental sensors, and readings can shift due to dust accumulation, condensation exposure, or simply aging beyond the calibration interval. Recalibrate the sensor against a certified reference, and if the discrepancy remains large after recalibration, the sensor element itself may need replacement.
+
+Q: Can industrial equipment be operated outside its rated temperature range for short periods?
+A: This is generally not recommended, even for brief periods, since operating outside rated thermal limits can cause immediate component stress or long-term reliability issues that may not be apparent right away. If your application regularly approaches the edge of the rated range, consider a ruggedized or extended-range model instead of the standard version.
+
+Q: What is Spring Boot?
+A: Spring Boot is a framework built on top of the Spring Framework that removes the need for manual configuration. It provides auto-configuration, embedded servers like Tomcat, and starter dependencies so you can get a production-ready application running with minimal setup.
+
+Q: What is the difference between Spring and Spring Boot?
+A: Spring is the core framework providing dependency injection and other foundational features, but it requires a lot of manual XML or Java configuration. Spring Boot builds on top of Spring and auto-configures most of that setup, so you write far less boilerplate to get an application running.
+
+Q: What does @SpringBootApplication do?
+A: It is a combination of three annotations: @Configuration (marks the class as a source of bean definitions), @EnableAutoConfiguration (tells Spring Boot to auto-configure beans based on the classpath), and @ComponentScan (tells Spring to scan the package and subpackages for components).
+
+Q: What is dependency injection in Spring?
+A: Dependency injection means Spring creates and manages the objects (beans) your classes need, and provides them automatically instead of you calling "new" yourself. This makes classes easier to test and decouples them from the concrete implementations they depend on.
+
+Q: What is a Spring Bean?
+A: A bean is simply an object that is created, configured, and managed by the Spring IoC container, rather than being instantiated directly by your code.
+
+Q: What is the purpose of application.properties or application.yml in Spring Boot?
+A: These files hold external configuration for the application, such as database connection details, server port, logging levels, and custom application settings, without requiring changes to the code itself. Spring Boot automatically loads values from these files at startup.
+
+Q: What is a REST controller in Spring Boot?
+A: A REST controller, marked with @RestController, is a class that handles incoming HTTP requests and returns data directly in the response body, typically as JSON, rather than rendering a view template. It combines @Controller and @ResponseBody behavior into a single annotation.
+
+Q: What is the role of the Service layer in a Spring Boot application?
+A: The Service layer contains the business logic of the application, sitting between the Controller layer (which handles HTTP requests) and the Repository layer (which handles data persistence). This separation keeps controllers thin and makes business logic reusable and easier to test.
+
+Q: What is Spring Data JPA used for?
+A: Spring Data JPA simplifies database access by letting you define repository interfaces without writing implementation code. It automatically generates the underlying SQL queries for common operations like save, find, update, and delete based on method names or annotations.
+
+Q: What is the purpose of a DTO (Data Transfer Object) in a Spring Boot application?
+A: A DTO is a plain object used to transfer data between layers, especially between the API and the client, without exposing internal entity structures directly. This helps control exactly what data is sent in API responses and prevents accidentally leaking internal database fields.
+
+Q: How do I know if my issue should be escalated to a specialist?
+A: If the standard troubleshooting steps provided don't resolve the issue, or if the problem involves data loss, security concerns, or repeated hardware failure, it should be escalated. Support agents typically escalate automatically after 2-3 failed resolution attempts on the same ticket.
+
+Q: What's the typical response time for a support ticket?
+A: Standard tickets are typically responded to within 24 business hours. Priority or urgent tickets — such as those involving complete service outages or safety concerns with industrial equipment — are usually addressed within 2-4 hours during business hours.
+
+Q: Can I request a specific support agent for a follow-up issue?
+A: While we can't guarantee the same agent will be available, you can reference the previous ticket number when opening a new request, and we'll route it to the same agent or team if they're available and it's relevant to continuity of the issue.
+
+Q: What information should I include when opening a support ticket to get faster help?
+A: Include your order or account number, a clear description of the issue, any error messages or codes exactly as shown, and steps you've already tried. For hardware issues, photos or videos of the problem significantly speed up diagnosis and reduce back-and-forth.
+
+Q: How do I check the status of an open support ticket?
+A: Log into your account and go to the Support or Help Center section, where open and past tickets are listed with their current status. You'll also receive email notifications whenever an agent responds or updates the ticket status.

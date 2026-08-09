@@ -1,5 +1,6 @@
 package com.itworx.supportdesk.exception;
 
+import com.openai.errors.OpenAIException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -7,6 +8,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.ResourceAccessException;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -73,6 +75,24 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(org.springframework.security.authentication.BadCredentialsException.class)
     public ProblemDetail handleBadCredentials(org.springframework.security.authentication.BadCredentialsException ex) {
         return problem(HttpStatus.UNAUTHORIZED, "Invalid Credentials", "Invalid email or password.");
+    }
+
+    // Ollama (or any other RestClient-based AI call) unreachable - e.g. the local
+    // embedding service isn't running. Without this handler the exception escaped
+    // unformatted and confusingly surfaced to the client as a 401.
+    @ExceptionHandler(ResourceAccessException.class)
+    public ProblemDetail handleAiServiceUnreachable(ResourceAccessException ex) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "AI Service Unavailable",
+                "The assistant's AI service isn't reachable right now. Please try again shortly.");
+    }
+
+    // Base type for every error the openai-java SDK throws (bad request, auth,
+    // rate limit, 5xx from the provider, etc.) - covers Groq's OpenAI-compatible
+    // chat endpoint used by ChatbotService. Catches the family instead of every
+    // concrete subtype (NotFoundException, RateLimitException, ...) individually.
+    @ExceptionHandler(OpenAIException.class)
+    public ProblemDetail handleAiServiceError(OpenAIException ex) {
+        return problem(HttpStatus.BAD_GATEWAY, "AI Service Error", ex.getMessage());
     }
 
     private ProblemDetail problem(HttpStatus status, String title, String detail) {

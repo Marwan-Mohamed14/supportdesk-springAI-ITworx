@@ -1,14 +1,16 @@
 import { MessageCircle, Send, X } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { askChatbot } from "../../lib/api.js";
 
 /* ============================================================
-   Chat widget — frontend shell only.
+   Chat widget — backed by the real RAG chatbot (POST /api/notes/ask).
    ------------------------------------------------------------
    Fixed circular toggle, bottom-right, on every authenticated
-   page (mounted once in App.jsx). Sending a message just echoes
-   a placeholder locally — there is no backend call here yet.
-   TODO: wire up to the real chatbot/assistant backend once it
-   exists; swap handleSend's local echo for a real API call.
+   page (mounted once in App.jsx). Retrieval + grounding happen
+   entirely server-side (ChatbotService: Ollama embeddings +
+   in-memory vector search + Groq chat completion) - this widget
+   just sends the question and renders whatever comes back.
    ============================================================ */
 
 const COLORS = {
@@ -20,20 +22,28 @@ const FONT = `"Segoe UI", "Segoe UI Semibold", -apple-system, BlinkMacSystemFont
 const GREETING = { from: "bot", text: "Hi! I'm the SupportDesk assistant. How can I help today?" };
 
 export default function ChatWidget() {
+  const { token } = useAuth();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([GREETING]);
   const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
 
-  const handleSend = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text) return;
+    if (!text || sending) return;
+
     setDraft("");
-    setMessages((prev) => [
-      ...prev,
-      { from: "user", text },
-      { from: "bot", text: "🚧 Chatbot logic isn't wired up yet — this is just the frontend shell for now." },
-    ]);
+    setMessages((prev) => [...prev, { from: "user", text }]);
+    setSending(true);
+    try {
+      const answer = await askChatbot(token, text);
+      setMessages((prev) => [...prev, { from: "bot", text: answer.trim() || "I don't have an answer for that." }]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { from: "bot", text: `⚠️ ${err.message}`, error: true }]);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -61,13 +71,22 @@ export default function ChatWidget() {
                 alignSelf: m.from === "user" ? "flex-end" : "flex-start",
                 maxWidth: "85%", padding: "9px 12px", borderRadius: 12, fontSize: 13.5, lineHeight: 1.45,
                 background: m.from === "user" ? COLORS.red : COLORS.panelHi,
-                color: COLORS.white,
+                color: m.error ? "#E2685C" : COLORS.white,
                 borderBottomRightRadius: m.from === "user" ? 3 : 12,
                 borderBottomLeftRadius: m.from === "bot" ? 3 : 12,
+                whiteSpace: "pre-wrap",
               }}>
                 {m.text}
               </div>
             ))}
+            {sending && (
+              <div style={{
+                alignSelf: "flex-start", padding: "9px 12px", borderRadius: 12, borderBottomLeftRadius: 3,
+                background: COLORS.panelHi, color: COLORS.greyDim, fontSize: 13.5,
+              }}>
+                Thinking…
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleSend} style={{ display: "flex", gap: 8, padding: 12, borderTop: `1px solid ${COLORS.line}` }}>
@@ -75,14 +94,18 @@ export default function ChatWidget() {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Type a message…"
+              disabled={sending}
               style={{
                 flex: 1, background: "#101820", border: `1px solid ${COLORS.line}`, borderRadius: 999,
                 padding: "9px 14px", color: COLORS.white, fontFamily: FONT, fontSize: 13.5, outline: "none",
+                opacity: sending ? 0.6 : 1,
               }}
             />
-            <button type="submit" aria-label="Send message" style={{
+            <button type="submit" aria-label="Send message" disabled={sending || !draft.trim()} style={{
               width: 36, height: 36, flexShrink: 0, borderRadius: "50%", border: "none",
-              background: COLORS.red, color: COLORS.white, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+              background: COLORS.red, color: COLORS.white, display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: sending || !draft.trim() ? "not-allowed" : "pointer",
+              opacity: sending || !draft.trim() ? 0.6 : 1,
             }}>
               <Send size={15} />
             </button>
