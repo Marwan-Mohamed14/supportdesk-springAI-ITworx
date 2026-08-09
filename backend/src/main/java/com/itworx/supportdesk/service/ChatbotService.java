@@ -1,6 +1,8 @@
 package com.itworx.supportdesk.service;
 
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -22,9 +24,14 @@ public class ChatbotService {
         @Value("classpath:Faq.txt")
     private Resource faqResource;
 
-    public ChatbotService(VectorStore vectorStore, ChatClient.Builder chatClientBuilder) {
+    public ChatbotService(VectorStore vectorStore, ChatClient.Builder chatClientBuilder, ChatMemory chatMemory) {
         this.vectorStore = vectorStore;
-        this.chatClient = chatClientBuilder.build();
+        // MessageChatMemoryAdvisor reads/writes chatMemory automatically on every
+        // call, keyed by whatever ChatMemory.CONVERSATION_ID param is passed in
+        // (see ask() below) - no manual message-list bookkeeping needed here.
+        this.chatClient = chatClientBuilder
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .build();
     }
      public int loadFaq() throws IOException {
         String content = faqResource.getContentAsString(StandardCharsets.UTF_8);
@@ -37,7 +44,7 @@ public class ChatbotService {
         return documents.size();
     }
 
-    public String ask(String question) {
+    public String ask(String question, String conversationId) {
         List<Document> similarDocs = vectorStore.similaritySearch(
             SearchRequest.builder().query(question).topK(2).build()
         );
@@ -47,7 +54,8 @@ public class ChatbotService {
             .collect(Collectors.joining("\n"));
 
         String prompt = """
-            Answer the question using only the context below.
+            Answer the question using only the context below, and the earlier
+            conversation if relevant to interpreting the question.
             If the context doesn't contain the answer, say you don't know.
 
             Context:
@@ -57,7 +65,11 @@ public class ChatbotService {
             %s
             """.formatted(context, question);
 
-        return chatClient.prompt().user(prompt).call().content();
+        return chatClient.prompt()
+            .user(prompt)
+            .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
+            .call()
+            .content();
     }
 
 }

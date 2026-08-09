@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.security.Principal;
 
 @RestController
 @RequestMapping("/api/notes")
@@ -26,7 +27,10 @@ public class ChatbotController {
     }
 
     @PostMapping("/ask")
-    public String ask(@RequestBody QueryRequest request) {
-        return chatbotService.ask(request.question());
+    public String ask(@RequestBody QueryRequest request, Principal principal) {
+        // The caller's email (set as the token's subject by JwtAuthFilter) doubles
+        // as the conversation id - one continuous memory per signed-in user, with
+        // no explicit session/conversation tracking needed on the frontend.
+        return chatbotService.ask(request.question(), principal.getName());
     }
 }
