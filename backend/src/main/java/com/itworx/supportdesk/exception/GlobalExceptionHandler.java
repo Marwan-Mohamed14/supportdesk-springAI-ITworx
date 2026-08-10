@@ -48,6 +48,26 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Insufficient Stock", ex.getMessage());
     }
 
+    @ExceptionHandler(KbArticleNotFoundException.class)
+    public ProblemDetail handleKbArticleNotFound(KbArticleNotFoundException ex) {
+        return problem(HttpStatus.NOT_FOUND, "Knowledge Base Article Not Found", ex.getMessage());
+    }
+
+    @ExceptionHandler(RefundNotFoundException.class)
+    public ProblemDetail handleRefundNotFound(RefundNotFoundException ex) {
+        return problem(HttpStatus.NOT_FOUND, "Refund Not Found", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidRefundStateException.class)
+    public ProblemDetail handleInvalidRefundState(InvalidRefundStateException ex) {
+        return problem(HttpStatus.BAD_REQUEST, "Invalid Request", ex.getMessage());
+    }
+
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ProblemDetail handleOrderNotFound(OrderNotFoundException ex) {
+        return problem(HttpStatus.NOT_FOUND, "Order Not Found", ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = ex.getBindingResult().getFieldErrors().stream()

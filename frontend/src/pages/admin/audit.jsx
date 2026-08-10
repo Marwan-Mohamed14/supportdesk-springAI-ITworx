@@ -1,8 +1,10 @@
-import React, { useState, useMemo, Fragment } from "react";
+import React, { useState, useMemo, useEffect, useCallback, Fragment } from "react";
 import {
   COLORS, FONT, Icon, DemoLoginPanel, AdminPageHeader, useAdminAuth, useToasts, Toasts,
   fieldLabel, inputStyle, StatChip, StatDivider, AdminOnlyGate,
 } from "./admin-shared.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
+import * as api from "../../lib/api.js";
 
 /* ============================================================
    Epic K — Audit Trail
@@ -24,15 +26,20 @@ import {
    read-only — it never mutates anything, it just displays what the
    backend already recorded.
 
-   Backend contract (Spring):
+   Backend contract (Spring) — implemented, see AuditController/AuditService:
      GET /api/audit?q=&action=&actor=&from=&to=
-   Real entries are written server-side by whichever endpoint performed
-   the action (refund approve/reject, KB create/edit/ingest, etc.) — this
-   page does not write audit rows itself, it only reads them.
-   MOCK_MODE seeds local data so this page runs without a backend.
+   Real entries are written server-side by whichever endpoint performed the
+   action - today that's KbArticleService (kb_created/kb_updated/kb_ingested)
+   and RefundService (refund_requested/refund_approved/refund_rejected). This
+   page does not write audit rows itself, it only reads them. "login" and
+   "ticket_escalated" entries aren't produced by anything yet - those need
+   login-time auditing and TicketService wiring that are outside this epic's
+   scope - so those ACTION_META entries stay unused for now rather than
+   fabricating fake activity.
    ============================================================ */
 
 const ACTION_META = {
+  refund_requested: { label: "Refund requested", color: COLORS.blue, icon: "creditCard" },
   refund_approved: { label: "Refund approved", color: COLORS.green, icon: "checkCircle" },
   refund_rejected: { label: "Refund rejected", color: COLORS.red, icon: "xCircle" },
   kb_created: { label: "KB article created", color: COLORS.blue, icon: "bookOpen" },
@@ -42,17 +49,15 @@ const ACTION_META = {
   ticket_escalated: { label: "Ticket escalated", color: COLORS.yellow, icon: "alertTriangle" },
 };
 
-function seedEntries() {
-  return [
-    { id: "AU-3001", timestamp: "2026-08-04 09:02", actor: "Karim (ADMIN)", action: "refund_approved", target: "RF-1003 · Lina Sabry", detail: "Approved $18.99 — confirmed duplicate in billing system." },
-    { id: "AU-3002", timestamp: "2026-08-04 08:55", actor: "AI Assistant", action: "ticket_escalated", target: "TCK-7742", detail: "Escalated to human agent — customer requested manager." },
-    { id: "AU-3003", timestamp: "2026-08-03 17:10", actor: "Karim (ADMIN)", action: "refund_rejected", target: "RF-1004 · Youssef Amin", detail: "Rejected $610.00 — cancellation window had closed." },
-    { id: "AU-3004", timestamp: "2026-08-03 15:40", actor: "Karim (ADMIN)", action: "kb_updated", target: "Warranty claims — storage devices", detail: "Edited body text, tags unchanged." },
-    { id: "AU-3005", timestamp: "2026-08-03 15:41", actor: "Karim (ADMIN)", action: "kb_ingested", target: "Warranty claims — storage devices", detail: "Re-ingested after edit — old chunks replaced." },
-    { id: "AU-3006", timestamp: "2026-08-02 11:05", actor: "Karim (ADMIN)", action: "login", target: "—", detail: "Signed in from admin console." },
-    { id: "AU-3007", timestamp: "2026-08-01 13:22", actor: "Sara (AGENT)", action: "ticket_escalated", target: "TCK-7699", detail: "Escalated — needed refund above agent authority." },
-    { id: "AU-3008", timestamp: "2026-07-30 10:12", actor: "Karim (ADMIN)", action: "kb_created", target: "Bulk order discount tiers", detail: "New article created as draft." },
-  ];
+function fromApi(e) {
+  return {
+    id: e.id,
+    timestamp: e.timestamp ? e.timestamp.slice(0, 16).replace("T", " ") : "",
+    actor: e.actor || "—",
+    action: e.action,
+    target: e.target || "—",
+    detail: e.detail || "",
+  };
 }
 
 /* ============================================================
@@ -64,19 +69,38 @@ function seedEntries() {
 export default function AuditTrailPage({ auth: authProp, onSignOut }) {
   const { toasts, pushToast, dismiss } = useToasts();
   const { auth, usingDemoAuth, now, setDemoAuth, handleSignOut, role } = useAdminAuth(authProp, onSignOut, pushToast);
+  const { token } = useAuth();
 
-  const [entries] = useState(seedEntries);
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [query, setQuery] = useState("");
   const [action, setAction] = useState("all");
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return entries.filter(e => {
-      const matchesQ = !q || e.target.toLowerCase().includes(q) || e.actor.toLowerCase().includes(q) || e.detail.toLowerCase().includes(q);
-      const matchesAction = action === "all" || e.action === action;
-      return matchesQ && matchesAction;
-    });
-  }, [entries, query, action]);
+  const canLoad = Boolean(auth) && role === "ADMIN" && Boolean(token);
+
+  const loadEntries = useCallback(async () => {
+    if (!canLoad) return;
+    setLoading(true);
+    setLoadError("");
+    try {
+      const page = await api.listAudit(token, {
+        q: query || undefined,
+        action: action !== "all" ? action : undefined,
+      });
+      setEntries((page.content || []).map(fromApi));
+    } catch (err) {
+      setLoadError(err.message || "Could not load the audit trail.");
+    } finally {
+      setLoading(false);
+    }
+  }, [canLoad, token, query, action]);
+
+  useEffect(() => {
+    loadEntries();
+  }, [loadEntries]);
+
+  const filtered = entries; // filtering happens server-side via loadEntries' query params
 
   const stats = useMemo(() => ({
     total: entries.length,
@@ -120,7 +144,15 @@ export default function AuditTrailPage({ auth: authProp, onSignOut }) {
               </select>
             </div>
 
-            {filtered.length === 0 ? (
+            {loadError && (
+              <div style={{ marginBottom: 16, padding: 12, border: `1px solid ${COLORS.red}`, borderRadius: 10, color: COLORS.red, fontFamily: FONT, fontSize: 13 }}>
+                {loadError}
+              </div>
+            )}
+
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "70px 0", color: COLORS.grey, fontFamily: FONT }}>Loading audit trail…</div>
+            ) : filtered.length === 0 ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "70px 0", border: `1px dashed ${COLORS.line}`, borderRadius: 16 }}>
                 <Icon name="shield" size={26} color={COLORS.greyDim} />
                 <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15 }}>No audit entries match these filters.</div>

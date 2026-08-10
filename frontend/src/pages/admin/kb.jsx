@@ -1,8 +1,10 @@
-import React, { useState, useMemo, Fragment } from "react";
+import React, { useState, useMemo, useEffect, useCallback, Fragment } from "react";
 import {
   COLORS, FONT, Icon, DemoLoginPanel, AdminPageHeader, useAdminAuth, useToasts, Toasts,
   Modal, fieldLabel, inputStyle, StatChip, StatDivider, AdminOnlyGate,
 } from "./admin-shared.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
+import * as api from "../../lib/api.js";
 
 /* ============================================================
    Epic F — Knowledge Base (author + ingest)
@@ -18,27 +20,34 @@ import {
        before Epic A is wired in. Delete the fallback once real auth exists.
      - Admin-only: there is no agent-facing view of this page (story A2).
 
-   Backend contract (Spring):
+   Backend contract (Spring) — implemented, see KbController:
      GET    /api/kb/articles?q=&category=&status=
      POST   /api/kb/articles          body: {title, category, tags[], body}
      PUT    /api/kb/articles/{id}     body: {title, category, tags[], body}
      POST   /api/kb/ingest            body: {articleId?}  (omit to re-ingest all)
-   MOCK_MODE seeds local data so this page runs without a backend; swap in
-   real fetch() calls per the endpoints above. Story F2: re-ingesting an
-   article must replace its old vector-store chunks, not duplicate them —
-   that's a backend concern once real ingest exists.
+   This page now calls those endpoints via lib/api.js instead of holding
+   its own seed data. `token` comes from AuthContext (the `auth` prop above
+   only carries displayName/role/expiresAt, not the JWT - see
+   withAdminAuth.jsx). Story F2: re-ingesting an article replaces its old
+   vector-store chunks server-side (KbArticleService.ingestOne) - nothing
+   client-side to do for that beyond calling ingest again.
    ============================================================ */
 
 const CATEGORIES = ["Policies", "Shipping", "Warranty", "Account", "Security"];
 
-function seedArticles() {
-  return [
-    { id: 1, title: "Return & refund policy", category: "Policies", tags: ["refunds", "returns"], status: "published", lastIngested: "2026-08-01", body: "" },
-    { id: 2, title: "Shipping timelines by region", category: "Shipping", tags: ["shipping"], status: "published", lastIngested: "2026-07-28", body: "" },
-    { id: 3, title: "Warranty claims — storage devices", category: "Warranty", tags: ["warranty", "storage"], status: "stale", lastIngested: "2026-06-14", body: "" },
-    { id: 4, title: "How to reset a customer password", category: "Account", tags: ["account", "security"], status: "draft", lastIngested: null, body: "" },
-    { id: 5, title: "Bulk order discount tiers", category: "Policies", tags: ["orders", "pricing"], status: "published", lastIngested: "2026-07-30", body: "" },
-  ];
+// Backend statuses are upper-case enum names (DRAFT/PUBLISHED/STALE); the
+// rest of this page's rendering logic was written against lower-case
+// strings, so normalize once here rather than touching every call site.
+function fromApi(article) {
+  return {
+    id: article.id,
+    title: article.title,
+    category: article.category,
+    tags: article.tags || [],
+    body: article.body || "",
+    status: (article.status || "DRAFT").toLowerCase(),
+    lastIngested: article.lastIngestedAt ? article.lastIngestedAt.slice(0, 10) : null,
+  };
 }
 
 function StatusChip({ status }) {
@@ -99,50 +108,92 @@ function ArticleForm({ initial, onSubmit, onCancel, error }) {
 export default function KnowledgeBasePage({ auth: authProp, onSignOut }) {
   const { toasts, pushToast, dismiss } = useToasts();
   const { auth, usingDemoAuth, now, setDemoAuth, handleSignOut, role } = useAdminAuth(authProp, onSignOut, pushToast);
+  const { token } = useAuth();
 
-  const [articles, setArticles] = useState(seedArticles);
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [status, setStatus] = useState("all");
   const [modal, setModal] = useState(null);
   const [modalError, setModalError] = useState("");
+  const [ingestingId, setIngestingId] = useState(null);
+  const [ingestingAll, setIngestingAll] = useState(false);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return articles.filter(a => {
-      const matchesQ = !q || a.title.toLowerCase().includes(q) || a.tags.some(t => t.toLowerCase().includes(q));
-      const matchesCat = category === "All" || a.category === category;
-      const matchesStatus = status === "all" || a.status === status;
-      return matchesQ && matchesCat && matchesStatus;
-    });
-  }, [articles, query, category, status]);
+  const canLoad = Boolean(auth) && role === "ADMIN" && Boolean(token);
 
-  const stats = useMemo(() => ({
-    total: articles.length,
-    published: articles.filter(a => a.status === "published").length,
-    stale: articles.filter(a => a.status === "stale").length,
-    draft: articles.filter(a => a.status === "draft").length,
-  }), [articles]);
+  const loadArticles = useCallback(async () => {
+    if (!canLoad) return;
+    setLoading(true);
+    setLoadError("");
+    try {
+      const page = await api.listKbArticles(token, {
+        q: query || undefined,
+        category: category !== "All" ? category : undefined,
+        status: status !== "all" ? status.toUpperCase() : undefined,
+      });
+      setArticles((page.content || []).map(fromApi));
+    } catch (err) {
+      setLoadError(err.message || "Could not load knowledge base articles.");
+    } finally {
+      setLoading(false);
+    }
+  }, [canLoad, token, query, category, status]);
 
-  const handleCreate = (form) => {
-    const nextId = Math.max(0, ...articles.map(a => a.id)) + 1;
-    setArticles(list => [{ id: nextId, ...form, status: "draft", lastIngested: null }, ...list]);
-    setModal(null); setModalError(""); pushToast(`Created "${form.title}" as a draft.`);
+  useEffect(() => {
+    loadArticles();
+  }, [loadArticles]);
+
+  const filtered = articles; // filtering happens server-side via loadArticles' query params
+
+  const handleCreate = async (form) => {
+    try {
+      await api.createKbArticle(token, { title: form.title, category: form.category, tags: form.tags, body: form.body });
+      setModal(null); setModalError("");
+      pushToast(`Created "${form.title}" as a draft.`);
+      loadArticles();
+    } catch (err) {
+      setModalError(err.message || "Could not create the article.");
+    }
   };
-  const handleUpdate = (form) => {
-    setArticles(list => list.map(a => a.id === modal.article.id ? { ...a, ...form, status: "stale" } : a));
-    setModal(null); setModalError(""); pushToast(`Saved "${form.title}" — marked for re-ingest.`);
+
+  const handleUpdate = async (form) => {
+    try {
+      await api.updateKbArticle(token, modal.article.id, { title: form.title, category: form.category, tags: form.tags, body: form.body });
+      setModal(null); setModalError("");
+      pushToast(`Saved "${form.title}" — marked for re-ingest.`);
+      loadArticles();
+    } catch (err) {
+      setModalError(err.message || "Could not save the article.");
+    }
   };
-  const ingestOne = (id) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const a = articles.find(x => x.id === id);
-    setArticles(list => list.map(x => x.id === id ? { ...x, status: "published", lastIngested: today } : x));
-    pushToast(`"${a.title}" re-ingested — old chunks replaced, no stale duplicates (story F2).`);
+
+  const ingestOne = async (id) => {
+    const a = articles.find((x) => x.id === id);
+    setIngestingId(id);
+    try {
+      await api.ingestKbArticles(token, id);
+      pushToast(`"${a?.title}" re-ingested — old chunks replaced, no stale duplicates (story F2).`);
+      loadArticles();
+    } catch (err) {
+      pushToast(err.message || "Could not re-ingest this article.", "error");
+    } finally {
+      setIngestingId(null);
+    }
   };
-  const ingestAll = () => {
-    const today = new Date().toISOString().slice(0, 10);
-    setArticles(list => list.map(a => ({ ...a, status: "published", lastIngested: today })));
-    pushToast("Re-ingested all articles.");
+
+  const ingestAll = async () => {
+    setIngestingAll(true);
+    try {
+      await api.ingestKbArticles(token, null);
+      pushToast("Re-ingested all articles.");
+      loadArticles();
+    } catch (err) {
+      pushToast(err.message || "Could not re-ingest articles.", "error");
+    } finally {
+      setIngestingAll(false);
+    }
   };
 
   return (
@@ -161,10 +212,10 @@ export default function KnowledgeBasePage({ auth: authProp, onSignOut }) {
         <Fragment>
           <div style={{ borderBottom: `1px solid ${COLORS.line}`, padding: "16px 28px", overflowX: "auto" }}>
             <div style={{ display: "flex", maxWidth: 1320, margin: "0 auto" }}>
-              <StatChip label="Total articles" value={stats.total} />
-              <StatDivider /><StatChip label="Published" value={stats.published} color={COLORS.green} />
-              <StatDivider /><StatChip label="Needs re-ingest" value={stats.stale} color={COLORS.yellow} />
-              <StatDivider /><StatChip label="Drafts" value={stats.draft} color={COLORS.greyDim} />
+              <StatChip label="Total articles" value={articles.length} />
+              <StatDivider /><StatChip label="Published" value={articles.filter(a => a.status === "published").length} color={COLORS.green} />
+              <StatDivider /><StatChip label="Needs re-ingest" value={articles.filter(a => a.status === "stale").length} color={COLORS.yellow} />
+              <StatDivider /><StatChip label="Drafts" value={articles.filter(a => a.status === "draft").length} color={COLORS.greyDim} />
             </div>
           </div>
 
@@ -185,8 +236,8 @@ export default function KnowledgeBasePage({ auth: authProp, onSignOut }) {
                   <option value="draft">Draft</option>
                   <option value="stale">Needs re-ingest</option>
                 </select>
-                <button onClick={ingestAll} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 9, padding: "0 14px", fontFamily: FONT, fontSize: 12.5, cursor: "pointer" }}>
-                  <Icon name="refreshCw" size={13} /> Re-ingest all
+                <button onClick={ingestAll} disabled={ingestingAll} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 9, padding: "0 14px", fontFamily: FONT, fontSize: 12.5, cursor: ingestingAll ? "default" : "pointer", opacity: ingestingAll ? 0.6 : 1 }}>
+                  <Icon name="refreshCw" size={13} /> {ingestingAll ? "Re-ingesting…" : "Re-ingest all"}
                 </button>
                 <button onClick={() => { setModal({ mode: "create" }); setModalError(""); }} style={{ display: "flex", alignItems: "center", gap: 6, background: COLORS.white, color: COLORS.ink, border: "none", borderRadius: 999, padding: "0 16px", fontFamily: FONT, fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}>
                   <Icon name="plus" size={14} /> New article
@@ -194,7 +245,15 @@ export default function KnowledgeBasePage({ auth: authProp, onSignOut }) {
               </div>
             </div>
 
-            {filtered.length === 0 ? (
+            {loadError && (
+              <div style={{ marginBottom: 16, padding: 12, border: `1px solid ${COLORS.red}`, borderRadius: 10, color: COLORS.red, fontFamily: FONT, fontSize: 13 }}>
+                {loadError}
+              </div>
+            )}
+
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "70px 0", color: COLORS.grey, fontFamily: FONT }}>Loading articles…</div>
+            ) : filtered.length === 0 ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "70px 0", border: `1px dashed ${COLORS.line}`, borderRadius: 16 }}>
                 <Icon name="bookOpen" size={26} color={COLORS.greyDim} />
                 <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15 }}>No articles match these filters.</div>
@@ -215,8 +274,8 @@ export default function KnowledgeBasePage({ auth: authProp, onSignOut }) {
                     <button onClick={() => { setModal({ mode: "edit", article: a }); setModalError(""); }} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 8, padding: "6px 11px", fontFamily: FONT, fontSize: 12, cursor: "pointer" }}>
                       <Icon name="pencil" size={12} /> Edit
                     </button>
-                    <button onClick={() => ingestOne(a.id)} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 8, padding: "6px 11px", fontFamily: FONT, fontSize: 12, cursor: "pointer" }}>
-                      <Icon name="refreshCw" size={12} /> Re-ingest
+                    <button onClick={() => ingestOne(a.id)} disabled={ingestingId === a.id} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 8, padding: "6px 11px", fontFamily: FONT, fontSize: 12, cursor: ingestingId === a.id ? "default" : "pointer", opacity: ingestingId === a.id ? 0.6 : 1 }}>
+                      <Icon name="refreshCw" size={12} /> {ingestingId === a.id ? "Re-ingesting…" : "Re-ingest"}
                     </button>
                   </div>
                 ))}

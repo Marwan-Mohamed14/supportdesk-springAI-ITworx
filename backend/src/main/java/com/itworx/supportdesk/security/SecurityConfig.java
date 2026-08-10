@@ -107,6 +107,22 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/products/**").hasRole("ADMIN")
 
+                        // Admin-only: the whole admin console (story A2) - knowledge base
+                        // (Epic F), audit trail (K4) and metrics (L2) have no agent-facing
+                        // view at all, so every method on these is restricted.
+                        .requestMatchers("/api/kb/**").hasRole("ADMIN")
+                        .requestMatchers("/api/audit/**").hasRole("ADMIN")
+                        .requestMatchers("/api/metrics/**").hasRole("ADMIN")
+
+                        // Refunds (H5): filing a request just needs an authenticated caller
+                        // (an agent flagging something a customer needs), but actually
+                        // moving money - listing the queue, approving, rejecting - is
+                        // ADMIN-only, same as the rest of the admin console.
+                        .requestMatchers(HttpMethod.POST, "/api/refunds").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/refunds").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/refunds/*/approve").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/refunds/*/reject").hasRole("ADMIN")
+
                         // Everything else just needs a valid, authenticated caller
                         .anyRequest().authenticated()
                 )

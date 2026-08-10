@@ -99,6 +99,46 @@ export const assignTicket = (token, id, agentId) =>
 export const escalateTicket = (token, id, reason) =>
   request(`/tickets/${id}/escalate`, { method: 'POST', body: { reason }, token });
 
+/* ---------------- Knowledge Base — /api/kb (ADMIN only, Epic F) ---------------- */
+// GET /api/kb/articles?q=&category=&status=&page=&size=&sort=
+export const listKbArticles = (token, { q, category, status, page, size, sort } = {}) =>
+  request(`/api/kb/articles${toQueryString({ q, category, status, page, size, sort })}`, { token });
+
+// POST /api/kb/articles  body: {title, category, tags[], body}
+export const createKbArticle = (token, body) => request('/api/kb/articles', { method: 'POST', body, token });
+
+// PUT /api/kb/articles/{id}  body: {title, category, tags[], body}
+export const updateKbArticle = (token, id, body) => request(`/api/kb/articles/${id}`, { method: 'PUT', body, token });
+
+// POST /api/kb/ingest  body: {articleId?} — omit articleId to re-ingest every article
+export const ingestKbArticles = (token, articleId) =>
+  request('/api/kb/ingest', { method: 'POST', body: { articleId: articleId ?? null }, token });
+
+/* ---------------- Refund Approvals — /api/refunds (Epic H, story H5) ---------------- */
+// GET /api/refunds?status=&overLimit=&page=&size=&sort= — ADMIN only
+export const listRefunds = (token, { status, overLimit, page, size, sort } = {}) =>
+  request(`/api/refunds${toQueryString({ status, overLimit, page, size, sort })}`, { token });
+
+// POST /api/refunds  body: {orderId, amount, reason} — any authenticated caller
+export const createRefund = (token, body) => request('/api/refunds', { method: 'POST', body, token });
+
+// POST /api/refunds/{id}/approve  body: {note?} — ADMIN only; note required if amount is at/above the auto-approve limit
+export const approveRefund = (token, id, note) =>
+  request(`/api/refunds/${id}/approve`, { method: 'POST', body: { note: note || null }, token });
+
+// POST /api/refunds/{id}/reject  body: {note} — ADMIN only, note required
+export const rejectRefund = (token, id, note) =>
+  request(`/api/refunds/${id}/reject`, { method: 'POST', body: { note: note || null }, token });
+
+/* ---------------- Audit Trail — /api/audit (ADMIN only, Epic K story K4) ---------------- */
+// GET /api/audit?q=&action=&actor=&from=&to=&page=&size=&sort= — read-only
+export const listAudit = (token, { q, action, actor, from, to, page, size, sort } = {}) =>
+  request(`/api/audit${toQueryString({ q, action, actor, from, to, page, size, sort })}`, { token });
+
+/* ---------------- Metrics — /api/metrics (ADMIN only, Epic L story L2) ---------------- */
+// GET /api/metrics/summary
+export const getMetricsSummary = (token) => request('/api/metrics/summary', { token });
+
 /* ---------------- Chatbot (RAG) — /api/notes ---------------- */
 // POST /api/notes/ask  body: {question} -> returns a plain-text answer (not JSON),
 // so this bypasses request()'s JSON-response handling.
