@@ -62,4 +62,10 @@ public class TicketController {
         Ticket ticket = ticketService.escalateTicket(id, request.reason());
         return ResponseEntity.ok(TicketResponse.from(ticket));
     }
+
+    @PostMapping("/{id}/close")
+    public ResponseEntity<TicketResponse> closeTicket(@PathVariable("id") UUID id) {
+        Ticket ticket = ticketService.closeTicket(id);
+        return ResponseEntity.ok(TicketResponse.from(ticket));
+    }
 }

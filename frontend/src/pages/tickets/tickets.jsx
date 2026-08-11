@@ -44,12 +44,6 @@ const PRIORITY_META = {
     HIGH: { label: "High", color: COLORS.red },
     URGENT: { label: "Urgent", color: "#E2685C" },
 };
-const STATUS_META = {
-    OPEN: { label: "Open", color: COLORS.blue },
-    IN_PROGRESS: { label: "In progress", color: COLORS.yellow },
-    ESCALATED: { label: "Escalated", color: COLORS.red },
-    CLOSED: { label: "Closed", color: COLORS.greyDim },
-};
 const STATUS_OPTIONS = ["ALL", "OPEN", "IN_PROGRESS", "ESCALATED", "CLOSED"];
 const PRIORITY_OPTIONS = ["ALL", "LOW", "MEDIUM", "HIGH", "URGENT"];
 const STATUS_META = {
