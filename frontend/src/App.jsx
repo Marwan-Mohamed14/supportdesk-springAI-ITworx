@@ -8,6 +8,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import Login from './pages/auth/login.jsx';
 import Signup from './pages/auth/signup.jsx';
 import OrdersPage from './pages/orders/orders.jsx';
+import AgentDashboard from './pages/agent/dashboard.jsx';
 import TicketsPage from './pages/tickets/tickets.jsx';
 import ProductCatalogPage from './pages/products/catalog.jsx';
 import ProductDetail from './pages/products/ProductDetail.jsx';
@@ -25,48 +26,56 @@ function App() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <>
-      <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+      <>
+        <Routes>
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
 
-        <Route
-          element={
-            <ProtectedRoute allowedRoles={["AGENT", "CUSTOMER"]}>
-              <AppShell />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/products" element={<ProductCatalogPage />} />
-          <Route path="/products/:id" element={<ProductDetail />} />
-          <Route path="/tickets" element={<TicketsPage />} />
-          <Route path="/orders" element={<OrdersPage />} />
-        </Route>
+          <Route
+              element={
+                <ProtectedRoute allowedRoles={["AGENT", "CUSTOMER"]}>
+                  <AppShell />
+                </ProtectedRoute>
+              }
+          >
+            <Route
+                path="/agent"
+                element={
+                  <ProtectedRoute allowedRoles={["AGENT"]}>
+                    <AgentDashboard />
+                  </ProtectedRoute>
+                }
+            />
+            <Route path="/products" element={<ProductCatalogPage />} />
+            <Route path="/products/:id" element={<ProductDetail />} />
+            <Route path="/tickets" element={<TicketsPage />} />
+            <Route path="/orders" element={<OrdersPage />} />
+          </Route>
 
-        <Route
-          element={
-            <ProtectedRoute allowedRoles={["ADMIN"]}>
-              <AdminLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/admin" element={<Navigate to="/admin/metrics" replace />} />
-          <Route path="/admin/metrics" element={<MetricsWithAuth />} />
-          {/* Same components as the customer/agent shell — admins are excluded from
+          <Route
+              element={
+                <ProtectedRoute allowedRoles={["ADMIN"]}>
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+          >
+            <Route path="/admin" element={<Navigate to="/admin/metrics" replace />} />
+            <Route path="/admin/metrics" element={<MetricsWithAuth />} />
+            {/* Same components as the customer/agent shell — admins are excluded from
               /products and /orders (see ProtectedRoute above), so product and order
               management is reused here instead of duplicated. */}
-          <Route path="/admin/products" element={<ProductCatalogPage />} />
-          <Route path="/admin/products/:id" element={<ProductDetail />} />
-          <Route path="/admin/orders" element={<OrdersPage />} />
-          <Route path="/admin/kb" element={<KnowledgeBaseWithAuth />} />
-          <Route path="/admin/refunds" element={<RefundsWithAuth />} />
-          <Route path="/admin/audit" element={<AuditWithAuth />} />
-        </Route>
-      </Routes>
+            <Route path="/admin/products" element={<ProductCatalogPage />} />
+            <Route path="/admin/products/:id" element={<ProductDetail />} />
+            <Route path="/admin/orders" element={<OrdersPage />} />
+            <Route path="/admin/kb" element={<KnowledgeBaseWithAuth />} />
+            <Route path="/admin/refunds" element={<RefundsWithAuth />} />
+            <Route path="/admin/audit" element={<AuditWithAuth />} />
+          </Route>
+        </Routes>
 
-      {isAuthenticated && <ChatWidget />}
-    </>
+        {isAuthenticated && <ChatWidget />}
+      </>
   );
 }
 

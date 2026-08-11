@@ -1,4 +1,4 @@
-import { LogOut, Package, PanelLeft, Ticket, FileText } from "lucide-react";
+import { LayoutDashboard, LogOut, Package, PanelLeft, Ticket, FileText } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 
@@ -24,9 +24,13 @@ const NAV_ITEMS = [
   { to: "/orders", label: "Orders", icon: FileText },
 ];
 
+// Agent-only, so it doesn't show up in a customer's sidebar.
+const AGENT_NAV_ITEM = { to: "/agent", label: "Dashboard", icon: LayoutDashboard };
+
 export default function AppShell() {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
+  const navItems = role === "AGENT" ? [AGENT_NAV_ITEM, ...NAV_ITEMS] : NAV_ITEMS;
 
   const handleSignOut = () => {
     logout();
@@ -47,7 +51,7 @@ export default function AppShell() {
           Categories
         </div>
         <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+          {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}

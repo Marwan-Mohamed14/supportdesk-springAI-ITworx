@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './agent-workspace.css';
+import { useAuth } from "../../context/AuthContext.jsx";
+import * as api from "../../lib/api.js";
 
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'];
 const RESOLUTION_CATEGORIES = ['Answered', 'Replaced', 'Refunded', 'No fault found'];
@@ -178,8 +180,9 @@ function Logo() {
 }
 
 export default function AgentWorkspace() {
-  const [tickets, setTickets] = useState(seedTickets);
-  const [selectedId, setSelectedId] = useState(seedTickets()[0].id);
+  const { token } = useAuth();
+  const [tickets, setTickets] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
   const [filter, setFilter] = useState('MY_OPEN');
   const [search, setSearch] = useState('');
 
@@ -193,6 +196,14 @@ export default function AgentWorkspace() {
 
   const [toast, setToast] = useState(null);
   const toastTimeout = useRef(null);
+
+  useEffect(() => {
+    if (!token) return;
+    api.listTickets(token, {}).then((page) => {
+      setTickets(page.content);
+      if (page.content.length > 0) setSelectedId(page.content[0].id);
+    });
+  }, [token]);
 
   const selected = tickets.find((t) => t.id === selectedId) || null;
 
@@ -256,16 +267,36 @@ export default function AgentWorkspace() {
     setNoteOpen(false);
   }
 
-  function handleEscalate() {
+  async function handleEscalate() {
     if (!selected || !escalateReason.trim()) return;
-    patch(
-      selected.id,
-      { status: 'ESCALATED', escalationReason: escalateReason.trim() },
-      { text: 'Escalated to senior support', when: 'just now', tone: 'warn' }
-    );
-    showToast('Ticket escalated');
-    setEscalateOpen(false);
-    setEscalateReason('');
+    try {
+      await api.escalateTicket(token, selected.id, escalateReason.trim());
+      patch(
+          selected.id,
+          { status: 'ESCALATED', escalationReason: escalateReason.trim() },
+          { text: 'Escalated to senior support', when: 'just now', tone: 'warn' }
+      );
+      showToast('Ticket escalated');
+      setEscalateOpen(false);
+      setEscalateReason('');
+    } catch (err) {
+      showToast('Failed to escalate: ' + err.message);
+    }
+  }
+
+  async function handleAssign(agentId) {
+    if (!selected) return;
+    try {
+      await api.assignTicket(token, selected.id, agentId);
+      patch(
+          selected.id,
+          { status: 'IN_PROGRESS' },
+          { text: 'Assigned', when: 'just now', tone: 'neutral' }
+      );
+      showToast('Ticket assigned');
+    } catch (err) {
+      showToast('Failed to assign: ' + err.message);
+    }
   }
 
   function handleReopen() {
@@ -515,6 +546,13 @@ export default function AgentWorkspace() {
                             }}
                           >
                             Internal note
+                          </button>
+                          <button
+                              type="button"
+                              className="aw-secondary-btn"
+                              onClick={() => handleAssign(selected.assignedAgentId || "8b418494-de8a-46fb-b462-0aa505d8bfd1")}
+                          >
+                            Assign to me
                           </button>
                           <button
                             type="button"

@@ -44,6 +44,12 @@ const PRIORITY_META = {
     HIGH: { label: "High", color: COLORS.red },
     URGENT: { label: "Urgent", color: "#E2685C" },
 };
+const STATUS_META = {
+    OPEN: { label: "Open", color: COLORS.blue },
+    IN_PROGRESS: { label: "In progress", color: COLORS.yellow },
+    ESCALATED: { label: "Escalated", color: COLORS.red },
+    CLOSED: { label: "Closed", color: COLORS.greyDim },
+};
 const STATUS_OPTIONS = ["ALL", "OPEN", "IN_PROGRESS", "ESCALATED", "CLOSED"];
 const PRIORITY_OPTIONS = ["ALL", "LOW", "MEDIUM", "HIGH", "URGENT"];
 const STATUS_META = {
@@ -73,6 +79,7 @@ const inputStyle = {
     boxSizing: "border-box",
 };
 const btn = (bg) => ({ background: bg, color: COLORS.white, border: "none", borderRadius: 7, padding: "8px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" });
+const smallBtn = (bg) => ({ ...btn(bg), padding: "6px 10px", fontSize: 11.5 });
 
 export default function TicketsPage() {
     const { token, user, role } = useAuth();
@@ -88,6 +95,16 @@ export default function TicketsPage() {
     const [form, setForm] = useState({ title: "", description: "", priority: "MEDIUM", orderId: "" });
     const [formError, setFormError] = useState("");
     const [submitting, setSubmitting] = useState(false);
+
+    // per-ticket action state: { [ticketId]: "assigning" | "escalating" | null }
+    const [actionState, setActionState] = useState({});
+    const [actionError, setActionError] = useState({});
+
+    // assign picker
+    const [users, setUsers] = useState([]);
+    const [usersLoaded, setUsersLoaded] = useState(false);
+    const [usersError, setUsersError] = useState(null);
+    const [assignPickerFor, setAssignPickerFor] = useState(null); // ticket object or null
 
     const refresh = async () => {
         setLoading(true);
@@ -160,6 +177,53 @@ export default function TicketsPage() {
         }
     }
 
+    function updateTicketInPlace(updated) {
+        setTickets((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    }
+
+    async function openAssignPicker(ticket) {
+        setAssignPickerFor(ticket);
+        if (!usersLoaded) {
+            setUsersError(null);
+            try {
+                const list = await api.listUsers(token);
+                setUsers(list);
+                setUsersLoaded(true);
+            } catch (err) {
+                setUsersError(err.message);
+            }
+        }
+    }
+
+    async function handleAssignTo(ticket, agentId) {
+        setAssignPickerFor(null);
+        setActionState((s) => ({ ...s, [ticket.id]: "assigning" }));
+        setActionError((s) => ({ ...s, [ticket.id]: null }));
+        try {
+            const updated = await api.assignTicket(token, ticket.id, agentId);
+            updateTicketInPlace(updated);
+        } catch (err) {
+            setActionError((s) => ({ ...s, [ticket.id]: err.message }));
+        } finally {
+            setActionState((s) => ({ ...s, [ticket.id]: null }));
+        }
+    }
+
+    async function handleEscalate(ticket) {
+        const reason = window.prompt("Reason for escalating this ticket?");
+        if (!reason || !reason.trim()) return;
+        setActionState((s) => ({ ...s, [ticket.id]: "escalating" }));
+        setActionError((s) => ({ ...s, [ticket.id]: null }));
+        try {
+            const updated = await api.escalateTicket(token, ticket.id, reason.trim());
+            updateTicketInPlace(updated);
+        } catch (err) {
+            setActionError((s) => ({ ...s, [ticket.id]: err.message }));
+        } finally {
+            setActionState((s) => ({ ...s, [ticket.id]: null }));
+        }
+    }
+
     return (
         <div style={{ background: COLORS.ink, color: COLORS.white, minHeight: "100%", padding: 28, fontFamily: "sans-serif" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
@@ -229,14 +293,14 @@ export default function TicketsPage() {
                     <h4 style={{ color: COLORS.greyDim, fontSize: 12, textTransform: "uppercase" }}>Status (filter only)</h4>
                     {STATUS_OPTIONS.map((s) => (
                         <div key={s} onClick={() => setStatusFilter(s)}
-                            style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", color: statusFilter === s ? COLORS.red : COLORS.grey, background: statusFilter === s ? COLORS.red + "1f" : "transparent" }}>
+                             style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", color: statusFilter === s ? COLORS.red : COLORS.grey, background: statusFilter === s ? COLORS.red + "1f" : "transparent" }}>
                             {s === "ALL" ? "All" : s.replace("_", " ")}
                         </div>
                     ))}
                     <h4 style={{ color: COLORS.greyDim, fontSize: 12, textTransform: "uppercase", marginTop: 20 }}>Priority</h4>
                     {PRIORITY_OPTIONS.map((p) => (
                         <div key={p} onClick={() => setPriorityFilter(p)}
-                            style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", color: priorityFilter === p ? COLORS.red : COLORS.grey, background: priorityFilter === p ? COLORS.red + "1f" : "transparent" }}>
+                             style={{ padding: "8px 10px", borderRadius: 6, cursor: "pointer", color: priorityFilter === p ? COLORS.red : COLORS.grey, background: priorityFilter === p ? COLORS.red + "1f" : "transparent" }}>
                             {p === "ALL" ? "All" : PRIORITY_META[p].label}
                         </div>
                     ))}
@@ -247,20 +311,48 @@ export default function TicketsPage() {
                         {loading ? "Loading…" : `${filtered.length} ticket(s)`}
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 14 }}>
-                        {filtered.map((t, i) => (
-                            <div key={t.ticketNumber || i} style={{ background: COLORS.panel, border: `1px solid ${COLORS.line}`, borderRadius: 10, padding: 16 }}>
-                                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                    <span style={{ fontFamily: "monospace", fontSize: 12, color: COLORS.greyDim, background: COLORS.panelHi, padding: "2px 7px", borderRadius: 4 }}>{t.ticketNumber}</span>
-                                    {t.priority && <Badge text={PRIORITY_META[t.priority]?.label || t.priority} color={PRIORITY_META[t.priority]?.color || COLORS.grey} />}
+                        {filtered.map((t, i) => {
+                            const busy = actionState[t.id];
+                            const err = actionError[t.id];
+                            const canAssign = t.status !== "CLOSED" && t.status !== "ESCALATED";
+                            const canEscalate = t.status !== "CLOSED";
+                            return (
+                                <div key={t.id || t.ticketNumber || i} style={{ background: COLORS.panel, border: `1px solid ${COLORS.line}`, borderRadius: 10, padding: 16 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                                        <span style={{ fontFamily: "monospace", fontSize: 12, color: COLORS.greyDim, background: COLORS.panelHi, padding: "2px 7px", borderRadius: 4 }}>{t.ticketNumber}</span>
+                                        <div style={{ display: "flex", gap: 6 }}>
+                                            {t.status && <Badge text={STATUS_META[t.status]?.label || t.status} color={STATUS_META[t.status]?.color || COLORS.grey} />}
+                                            {t.priority && <Badge text={PRIORITY_META[t.priority]?.label || t.priority} color={PRIORITY_META[t.priority]?.color || COLORS.grey} />}
+                                        </div>
+                                    </div>
+                                    <h4 style={{ margin: "10px 0 4px" }}>{t.title}</h4>
+                                    <div style={{ color: COLORS.greyDim, fontSize: 13 }}>{t.description}</div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, borderTop: `1px solid ${COLORS.line}`, paddingTop: 10, fontSize: 12.5, color: COLORS.greyDim }}>
+                                        <span>{t.assignedAgentId ? "Assigned" : "Unassigned"}</span>
+                                        {t.orderId && <span>Order: {t.orderId.slice(0, 8)}…</span>}
+                                    </div>
+                                    {err && <div style={{ color: "#E2685C", fontSize: 12, marginTop: 8 }}>{err}</div>}
+                                    {t.id && (
+                                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                                            <button
+                                                style={{ ...smallBtn(COLORS.blue), opacity: canAssign ? 1 : 0.5, cursor: canAssign ? "pointer" : "not-allowed" }}
+                                                disabled={!canAssign || !!busy}
+                                                onClick={() => openAssignPicker(t)}
+                                            >
+                                                {busy === "assigning" ? "Assigning…" : "Assign"}
+                                            </button>
+                                            <button
+                                                style={{ ...smallBtn(COLORS.red), opacity: canEscalate ? 1 : 0.5, cursor: canEscalate ? "pointer" : "not-allowed" }}
+                                                disabled={!canEscalate || !!busy}
+                                                onClick={() => handleEscalate(t)}
+                                            >
+                                                {busy === "escalating" ? "Escalating…" : "Escalate"}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
-                                <h4 style={{ margin: "10px 0 4px" }}>{t.title}</h4>
-                                <div style={{ color: COLORS.greyDim, fontSize: 13 }}>{t.description}</div>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, borderTop: `1px solid ${COLORS.line}`, paddingTop: 10, fontSize: 12.5, color: COLORS.greyDim }}>
-                                    <span>{t.assignedAgentId ? "Assigned" : "Unassigned"}</span>
-                                    {t.orderId && <span>Order: {t.orderId.slice(0, 8)}…</span>}
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                         {!loading && filtered.length === 0 && (
                             <div style={{ color: COLORS.greyDim, fontSize: 13.5, padding: "24px 0" }}>No tickets match this filter.</div>
                         )}
@@ -294,6 +386,51 @@ export default function TicketsPage() {
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                             <button style={{ ...btn(COLORS.panel), border: `1px solid ${COLORS.line}` }} onClick={() => setNewTicketOpen(false)}>Cancel</button>
                             <button style={btn(COLORS.red)} disabled={submitting} onClick={createTicket}>{submitting ? "Creating…" : "Create ticket"}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {assignPickerFor && (
+                <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60 }}
+                     onClick={() => setAssignPickerFor(null)}>
+                    <div style={{ background: COLORS.panelHi, border: `1px solid ${COLORS.line}`, borderRadius: 12, padding: 24, width: 340, maxHeight: "70vh", display: "flex", flexDirection: "column" }}
+                         onClick={(e) => e.stopPropagation()}>
+                        <h3 style={{ marginTop: 0, marginBottom: 4 }}>Assign ticket</h3>
+                        <p style={{ margin: "0 0 14px", fontSize: 12.5, color: COLORS.greyDim }}>{assignPickerFor.ticketNumber}</p>
+
+                        {usersError && (
+                            <div style={{ color: "#E2685C", fontSize: 12.5, marginBottom: 10 }}>
+                                Couldn't load people — {usersError}
+                            </div>
+                        )}
+                        {!usersLoaded && !usersError && (
+                            <div style={{ color: COLORS.greyDim, fontSize: 13 }}>Loading people…</div>
+                        )}
+
+                        <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                            {users.map((u) => (
+                                <button
+                                    key={u.id}
+                                    style={{
+                                        textAlign: "left",
+                                        background: COLORS.panel,
+                                        border: `1px solid ${COLORS.line}`,
+                                        borderRadius: 8,
+                                        padding: "9px 12px",
+                                        color: COLORS.white,
+                                        cursor: "pointer",
+                                    }}
+                                    onClick={() => handleAssignTo(assignPickerFor, u.id)}
+                                >
+                                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>{u.name}</div>
+                                    <div style={{ fontSize: 12, color: COLORS.greyDim }}>{u.email}</div>
+                                </button>
+                            ))}
+                        </div>
+
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+                            <button style={{ ...btn(COLORS.panel), border: `1px solid ${COLORS.line}` }} onClick={() => setAssignPickerFor(null)}>Cancel</button>
                         </div>
                     </div>
                 </div>

@@ -44,71 +44,71 @@ function Login() {
   };
 
   return (
-    <AuthLayout>
-      <div>
-        <Heading>Sign in to your workspace</Heading>
-        <Subheading>Use your ITWorx work account to continue.</Subheading>
-      </div>
+      <AuthLayout>
+        <div>
+          <Heading>Sign in to your workspace</Heading>
+          <Subheading>Use your ITWorx work account to continue.</Subheading>
+        </div>
 
-      <AuthTabs active="login" />
+        <AuthTabs active="login" />
 
-      <Form onSubmit={handleSubmit}>
-        {formError && <FormError>{formError}</FormError>}
+        <Form onSubmit={handleSubmit}>
+          {formError && <FormError>{formError}</FormError>}
 
-        <FormField
-          id="email"
-          label="Work email"
-          icon={Mail}
-          type="email"
-          name="email"
-          placeholder="sara.adel@itworx.com"
-          autoComplete="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          required
-        />
-
-        <FormField
-          id="password"
-          label="Password"
-          labelRight={<InlineLink as={Link} to="/forgot-password">Forgot password?</InlineLink>}
-          icon={Lock}
-          type={showPassword ? 'text' : 'password'}
-          name="password"
-          placeholder="••••••••"
-          autoComplete="current-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          trailingIcon={showPassword ? EyeOff : Eye}
-          onTrailingClick={() => setShowPassword((prev) => !prev)}
-          required
-        />
-
-        <CheckboxRow>
-          <input
-            type="checkbox"
-            checked={keepSignedIn}
-            onChange={(event) => setKeepSignedIn(event.target.checked)}
+          <FormField
+              id="email"
+              label="Work email"
+              icon={Mail}
+              type="email"
+              name="email"
+              placeholder="sara.adel@itworx.com"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
           />
-          Keep me signed in on this device
-        </CheckboxRow>
 
-        <PrimaryButton type="submit" disabled={submitting}>
-          {submitting ? 'Signing in…' : 'Sign in'}
-        </PrimaryButton>
-      </Form>
+          <FormField
+              id="password"
+              label="Password"
+              labelRight={<InlineLink as={Link} to="/forgot-password">Forgot password?</InlineLink>}
+              icon={Lock}
+              type={showPassword ? 'text' : 'password'}
+              name="password"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              trailingIcon={showPassword ? EyeOff : Eye}
+              onTrailingClick={() => setShowPassword((prev) => !prev)}
+              required
+          />
 
-      <Divider>OR</Divider>
+          <CheckboxRow>
+            <input
+                type="checkbox"
+                checked={keepSignedIn}
+                onChange={(event) => setKeepSignedIn(event.target.checked)}
+            />
+            Keep me signed in on this device
+          </CheckboxRow>
 
-      <GhostButton type="button">
-        <ShieldCheck size={16} />
-        Continue with ITWorx SSO
-      </GhostButton>
+          <PrimaryButton type="submit" disabled={submitting}>
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </PrimaryButton>
+        </Form>
 
-      <FooterText>
-        New to SupportDesk AI? <InlineLink as={Link} to="/signup">Create an account</InlineLink>
-      </FooterText>
-    </AuthLayout>
+        <Divider>OR</Divider>
+
+        <GhostButton type="button">
+          <ShieldCheck size={16} />
+          Continue with ITWorx SSO
+        </GhostButton>
+
+        <FooterText>
+          New to SupportDesk AI? <InlineLink as={Link} to="/signup">Create an account</InlineLink>
+        </FooterText>
+      </AuthLayout>
   );
 }
 
