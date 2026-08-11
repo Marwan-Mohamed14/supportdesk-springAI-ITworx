@@ -108,6 +108,10 @@ export const assignTicket = (token, id, agentId) =>
 export const escalateTicket = (token, id, reason) =>
     request(`/tickets/${id}/escalate`, { method: 'POST', body: { reason }, token });
 
+// POST /tickets/{id}/close  no body
+export const closeTicket = (token, id) =>
+    request(`/tickets/${id}/close`, { method: 'POST', token });
+
 /* ---------------- Chatbot (RAG) — /api/notes ---------------- */
 // POST /api/notes/ask  body: {question} -> returns a plain-text answer (not JSON),
 // so this bypasses request()'s JSON-response handling.
