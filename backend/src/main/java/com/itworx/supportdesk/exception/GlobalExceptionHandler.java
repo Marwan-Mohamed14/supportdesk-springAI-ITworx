@@ -48,6 +48,21 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Insufficient Stock", ex.getMessage());
     }
 
+    @ExceptionHandler(TicketNotFoundException.class)
+    public ProblemDetail handleTicketNotFound(TicketNotFoundException ex) {
+        return problem(HttpStatus.NOT_FOUND, "Ticket Not Found", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidTicketStateException.class)
+    public ProblemDetail handleInvalidTicketState(InvalidTicketStateException ex) {
+        return problem(HttpStatus.CONFLICT, "Invalid Ticket State", ex.getMessage());
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ProblemDetail handleUserNotFound(UserNotFoundException ex) {
+        return problem(HttpStatus.NOT_FOUND, "User Not Found", ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = ex.getBindingResult().getFieldErrors().stream()

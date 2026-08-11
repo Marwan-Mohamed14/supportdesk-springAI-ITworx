@@ -149,6 +149,20 @@ public Ticket escalateTicket(UUID ticketId, String reason) {
     return ticketRepository.save(ticket);
 }
 
+@Transactional
+public Ticket closeTicket(UUID ticketId) {
+    Ticket ticket = getTicketOrThrow(ticketId);
+
+    if (ticket.getStatus() == TicketStatus.CLOSED) {
+        throw new InvalidTicketStateException(
+                "Cannot close ticket " + ticketId + ": ticket is already CLOSED");
+    }
+
+    ticket.setStatus(TicketStatus.CLOSED);
+
+    return ticketRepository.save(ticket);
+}
+
 private Ticket getTicketOrThrow(UUID ticketId) {
     return ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
