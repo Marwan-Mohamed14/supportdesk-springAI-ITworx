@@ -2,29 +2,21 @@
 //
 // Support Tickets page, backed by the real backend:
 //   GET  /tickets?status=&priority=&page=&size=&sort=
-//   POST /tickets/create   body: { customerId, title, description, priority, orderId? }
+//   POST /tickets/create             body: { customerId, title, description, priority, orderId? }
+//   POST /tickets/create-and-assign  same body — also auto-picks an agent (used by ChatWidget)
 //
-// Two real backend gaps shape what this page can do (not worked around
+// Real backend gaps still shaping what this page can do (not worked around
 // with invented data — just left out, and called out here):
 //
-//  1. TicketController's create/list endpoints both return the OLDER
-//     `dto.TicketResponse` (customerId, ticketNumber, title, description,
-//     priority, orderId, assignedAgentId) — it has NO `id` and NO `status`.
-//     Only the assign/escalate endpoints return the newer
-//     `dto.ticket.TicketResponse` record, which DOES have both. Since a
-//     ticket's id is required to call /tickets/{id}/assign or /escalate,
-//     and list/create never hand that id back, this page has no way to
-//     wire Assign/Escalate to a ticket it just listed or created — so
-//     those actions aren't offered here. Fix: have TicketController's
-//     create/list use `dto.ticket.TicketResponse` too, then this page can
-//     wire them up with no other changes needed.
-//  2. `status` is a valid filter to send (the list endpoint filters by it
-//     server-side), but individual tickets in the response never carry
-//     their own status back — so there's no status badge per ticket below.
-//  3. The list endpoint isn't scoped to the caller — it returns every
+//  1. The list endpoint isn't scoped to the caller — it returns every
 //     ticket in the system to any authenticated user, and there's no
 //     free-text search param (the search box below filters client-side
 //     over the page already fetched, it doesn't call anything new).
+//
+// (Create/list used to return an older DTO with no `id`/`status`, which is
+// why Assign/Escalate weren't wired here and the list had no status badge —
+// both endpoints now return the same DTO assign/escalate use, so the
+// "Assigned to you" panel below can rely on `status`.)
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -54,6 +46,12 @@ const PRIORITY_META = {
 };
 const STATUS_OPTIONS = ["ALL", "OPEN", "IN_PROGRESS", "ESCALATED", "CLOSED"];
 const PRIORITY_OPTIONS = ["ALL", "LOW", "MEDIUM", "HIGH", "URGENT"];
+const STATUS_META = {
+    OPEN: { label: "Open", color: COLORS.grey },
+    IN_PROGRESS: { label: "In progress", color: COLORS.green },
+    ESCALATED: { label: "Escalated", color: COLORS.yellow },
+    CLOSED: { label: "Closed", color: COLORS.greyDim },
+};
 
 function Badge({ text, color }) {
     return (
@@ -77,7 +75,7 @@ const inputStyle = {
 const btn = (bg) => ({ background: bg, color: COLORS.white, border: "none", borderRadius: 7, padding: "8px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" });
 
 export default function TicketsPage() {
-    const { token, user } = useAuth();
+    const { token, user, role } = useAuth();
     const { orders } = useOrders();
 
     const [tickets, setTickets] = useState([]);
@@ -128,6 +126,14 @@ export default function TicketsPage() {
         tickets.forEach((t) => { if (t.priority && counts[t.priority] !== undefined) counts[t.priority] += 1; });
         return counts;
     }, [tickets]);
+
+    // Informational only — no accept/decline here, tickets assigned via the
+    // chatbot's auto-assign flow (or manual assign) land straight in
+    // IN_PROGRESS, so there's nothing for the agent to act on but see it.
+    const assignedToMe = useMemo(
+        () => (role === "AGENT" ? tickets.filter((t) => t.assignedAgentId === user?.userId) : []),
+        [tickets, role, user]
+    );
 
     async function createTicket() {
         if (!form.title.trim() || !form.description.trim()) {
@@ -180,6 +186,29 @@ export default function TicketsPage() {
                     </div>
                 ))}
             </div>
+
+            {role === "AGENT" && assignedToMe.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                    <h4 style={{ margin: "0 0 10px", fontSize: 12, color: COLORS.greyDim, textTransform: "uppercase" }}>
+                        Assigned to you ({assignedToMe.length})
+                    </h4>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 14 }}>
+                        {assignedToMe.map((t) => (
+                            <div key={t.id} style={{ background: COLORS.panel, border: `1px solid ${COLORS.red}`, borderRadius: 10, padding: 16 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                                    <span style={{ fontFamily: "monospace", fontSize: 12, color: COLORS.greyDim, background: COLORS.panelHi, padding: "2px 7px", borderRadius: 4 }}>{t.ticketNumber}</span>
+                                    <div style={{ display: "flex", gap: 6 }}>
+                                        {t.status && <Badge text={STATUS_META[t.status]?.label || t.status} color={STATUS_META[t.status]?.color || COLORS.grey} />}
+                                        {t.priority && <Badge text={PRIORITY_META[t.priority]?.label || t.priority} color={PRIORITY_META[t.priority]?.color || COLORS.grey} />}
+                                    </div>
+                                </div>
+                                <h4 style={{ margin: "10px 0 4px" }}>{t.title}</h4>
+                                <div style={{ color: COLORS.greyDim, fontSize: 13 }}>{t.description}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <input
                 placeholder="Filter this page by ticket number, title, or description"

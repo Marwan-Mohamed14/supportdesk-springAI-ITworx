@@ -91,6 +91,11 @@ export const listTickets = (token, { status, priority, page, size, sort } = {}) 
 // POST /tickets/create  body: {customerId, title, description, priority, orderId?}
 export const createTicket = (token, body) => request('/tickets/create', { method: 'POST', body, token });
 
+// POST /tickets/create-and-assign  body: same as createTicket - also auto-picks
+// the least-loaded agent and assigns the ticket to them in one step. Used by
+// the chatbot's "Connect me with an agent" escalation (see ChatWidget.jsx).
+export const createAndAssignTicket = (token, body) => request('/tickets/create-and-assign', { method: 'POST', body, token });
+
 // POST /tickets/{id}/assign  body: {agentId}
 export const assignTicket = (token, id, agentId) =>
   request(`/tickets/${id}/assign`, { method: 'POST', body: { agentId }, token });
@@ -102,13 +107,13 @@ export const escalateTicket = (token, id, reason) =>
 /* ---------------- Chatbot (RAG) — /api/notes ---------------- */
 // POST /api/notes/ask  body: {question} -> returns a plain-text answer (not JSON),
 // so this bypasses request()'s JSON-response handling.
-export async function askChatbot(token, question) {
+export async function askChatbot(token, question, conversationId) {
   let response;
   try {
     response = await fetch(`${API_BASE_URL}/api/notes/ask`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, conversationId }),
     });
   } catch {
     throw new ApiError('Could not reach the assistant. Please try again.', { status: 0 });

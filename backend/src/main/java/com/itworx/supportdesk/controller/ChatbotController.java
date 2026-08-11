@@ -19,7 +19,7 @@ public class ChatbotController {
         this.chatbotService = chatbotService;
     }
 
-    public record QueryRequest(String question) {}
+    public record QueryRequest(String question, String conversationId) {}
 
     @PostMapping("/load-file")
     public String loadFile() throws IOException {
@@ -28,9 +28,15 @@ public class ChatbotController {
 
     @PostMapping("/ask")
     public String ask(@RequestBody QueryRequest request, Principal principal) {
-        // The caller's email (set as the token's subject by JwtAuthFilter) doubles
-        // as the conversation id - one continuous memory per signed-in user, with
-        // no explicit session/conversation tracking needed on the frontend.
-        return chatbotService.ask(request.question(), principal.getName());
+        // Memory is keyed per chat session, not per user: the frontend generates a
+        // fresh conversationId each time the widget mounts (and on "New chat"), so
+        // closing/reopening the widget starts a clean thread instead of quietly
+        // resuming whatever the user said last time. The caller's email still
+        // namespaces it (prefixed below) so conversation ids never collide across
+        // different accounts.
+        String rawId = request.conversationId();
+        String sessionId = (rawId == null || rawId.isBlank()) ? "default" : rawId;
+        String conversationId = principal.getName() + ":" + sessionId;
+        return chatbotService.ask(request.question(), conversationId);
     }
 }

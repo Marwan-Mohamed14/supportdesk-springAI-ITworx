@@ -54,9 +54,15 @@ public class ChatbotService {
             .collect(Collectors.joining("\n"));
 
         String prompt = """
-            Answer the question using only the context below, and the earlier
-            conversation if relevant to interpreting the question.
-            If the context doesn't contain the answer, say you don't know.
+            Answer the question using the context below and the earlier
+            conversation. Use the context for factual/product/support
+            questions. Use the conversation history directly when the
+            question is about the conversation itself (e.g. the user's
+            name, or something they told you earlier) or when it's needed
+            to interpret the question (e.g. "that" referring back to an
+            earlier message).
+            If neither the context nor the conversation history has the
+            answer, say you don't know - don't make one up.
 
             Context:
             %s

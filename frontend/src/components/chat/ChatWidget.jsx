@@ -1,7 +1,11 @@
-import { MessageCircle, Send, X } from "lucide-react";
+import { MessageCircle, RotateCcw, Send, UserPlus, X } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { askChatbot } from "../../lib/api.js";
+import { askChatbot, createAndAssignTicket } from "../../lib/api.js";
+
+// After this many messages from the customer, the "Connect me with an agent"
+// option appears in the chat and stays there - see ESCALATE_AFTER usage below.
+const ESCALATE_AFTER = 3;
 
 /* ============================================================
    Chat widget — backed by the real RAG chatbot (POST /api/notes/ask).
@@ -22,11 +26,34 @@ const FONT = `"Segoe UI", "Segoe UI Semibold", -apple-system, BlinkMacSystemFont
 const GREETING = { from: "bot", text: "Hi! I'm the SupportDesk assistant. How can I help today?" };
 
 export default function ChatWidget() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([GREETING]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  // Identifies this chat thread to the backend's per-session memory (see
+  // ChatbotController#ask). Regenerated on "New chat" so the assistant
+  // genuinely forgets - reloading/reopening the widget otherwise keeps the
+  // same id, matching what the visible transcript below suggests.
+  const [conversationId, setConversationId] = useState(() => crypto.randomUUID());
+
+  // Counts the customer's own messages this conversation. Once it hits
+  // ESCALATE_AFTER, the "Connect me with an agent" button appears and - per
+  // product decision - just stays there; not clicking it is the refusal, so
+  // there's no separate dismiss/decline action.
+  const [userMessageCount, setUserMessageCount] = useState(0);
+  const [escalating, setEscalating] = useState(false);
+  const [escalated, setEscalated] = useState(false);
+  const showAgentOption = userMessageCount >= ESCALATE_AFTER && !escalated;
+
+  const handleNewChat = () => {
+    if (sending) return;
+    setMessages([GREETING]);
+    setConversationId(crypto.randomUUID());
+    setUserMessageCount(0);
+    setEscalating(false);
+    setEscalated(false);
+  };
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -35,14 +62,49 @@ export default function ChatWidget() {
 
     setDraft("");
     setMessages((prev) => [...prev, { from: "user", text }]);
+    setUserMessageCount((prev) => prev + 1);
     setSending(true);
     try {
-      const answer = await askChatbot(token, text);
+      const answer = await askChatbot(token, text, conversationId);
       setMessages((prev) => [...prev, { from: "bot", text: answer.trim() || "I don't have an answer for that." }]);
     } catch (err) {
       setMessages((prev) => [...prev, { from: "bot", text: `⚠️ ${err.message}`, error: true }]);
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleConnectToAgent = async () => {
+    if (escalating || escalated) return;
+    setEscalating(true);
+    try {
+      const firstQuestion = messages.find((m) => m.from === "user")?.text ?? "Chatbot escalation";
+      const title = firstQuestion.length > 60 ? `${firstQuestion.slice(0, 57)}...` : firstQuestion;
+      const description = messages
+        .map((m) => `${m.from === "user" ? "You" : "Assistant"}: ${m.text}`)
+        .join("\n");
+
+      const ticket = await createAndAssignTicket(token, {
+        customerId: user.userId,
+        title,
+        description,
+        priority: "MEDIUM",
+      });
+
+      setEscalated(true);
+      setMessages((prev) => [
+        ...prev,
+        {
+          from: "bot",
+          text: ticket.assignedAgentId
+            ? `You're connected — ticket ${ticket.ticketNumber} has been created and assigned to a support agent. They'll be in touch shortly.`
+            : `Ticket ${ticket.ticketNumber} has been created. No agents are available right now, but one will pick it up shortly.`,
+        },
+      ]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { from: "bot", text: `⚠️ ${err.message}`, error: true }]);
+    } finally {
+      setEscalating(false);
     }
   };
 
@@ -60,9 +122,17 @@ export default function ChatWidget() {
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#31B456" }} />
               <span style={{ fontWeight: 700, fontSize: 14, color: COLORS.white }}>SupportDesk Assistant</span>
             </div>
-            <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: COLORS.grey, cursor: "pointer", padding: 4 }}>
-              <X size={16} />
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <button onClick={handleNewChat} disabled={sending} aria-label="Start new chat" title="Start new chat" style={{
+                background: "none", border: "none", color: COLORS.grey, cursor: sending ? "not-allowed" : "pointer", padding: 4,
+                opacity: sending ? 0.5 : 1,
+              }}>
+                <RotateCcw size={15} />
+              </button>
+              <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: COLORS.grey, cursor: "pointer", padding: 4 }}>
+                <X size={16} />
+              </button>
+            </div>
           </div>
 
           <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -88,6 +158,25 @@ export default function ChatWidget() {
               </div>
             )}
           </div>
+
+          {showAgentOption && (
+            <div style={{ padding: "0 16px 12px" }}>
+              <button
+                type="button"
+                onClick={handleConnectToAgent}
+                disabled={escalating}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  background: COLORS.panelHi, color: COLORS.white, border: `1px solid ${COLORS.line}`,
+                  borderRadius: 10, padding: "10px 12px", fontSize: 13, fontWeight: 700, fontFamily: FONT,
+                  cursor: escalating ? "not-allowed" : "pointer", opacity: escalating ? 0.6 : 1,
+                }}
+              >
+                <UserPlus size={15} />
+                {escalating ? "Connecting…" : "Connect me with an agent"}
+              </button>
+            </div>
+          )}
 
           <form onSubmit={handleSend} style={{ display: "flex", gap: 8, padding: 12, borderTop: `1px solid ${COLORS.line}` }}>
             <input
