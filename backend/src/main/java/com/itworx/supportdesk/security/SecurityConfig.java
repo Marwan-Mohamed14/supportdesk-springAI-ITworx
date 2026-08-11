@@ -99,8 +99,8 @@ public class SecurityConfig {
                         // never even gets to see the real request's response
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // Public - no token required (A1). Bootstrapping endpoint only.
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/actuator/health").permitAll()
 
                         // Admin-only: catalog writes (B1, B3, B4)
                         .requestMatchers(HttpMethod.POST, "/api/products").hasRole("ADMIN")

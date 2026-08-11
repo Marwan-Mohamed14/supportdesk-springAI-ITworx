@@ -1,3 +1,5 @@
+import RefundApprovalsPage from './pages/admin/refunds.jsx';
+import SystemHealthPage from './pages/admin/health.jsx';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AdminLayout from './components/layout/AdminLayout.jsx';
 import AppShell from './components/layout/AppShell.jsx';
@@ -71,6 +73,7 @@ function App() {
             <Route path="/admin/kb" element={<KnowledgeBaseWithAuth />} />
             <Route path="/admin/refunds" element={<RefundsWithAuth />} />
             <Route path="/admin/audit" element={<AuditWithAuth />} />
+              <Route path="/admin/health" element={<SystemHealthPage />} />
           </Route>
         </Routes>
 
