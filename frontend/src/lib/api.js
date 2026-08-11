@@ -32,8 +32,8 @@ async function request(path, { method = 'GET', body, token } = {}) {
 
   if (!response.ok) {
     throw new ApiError(
-      data?.detail || data?.title || `Request failed (${response.status})`,
-      { status: response.status, fieldErrors: data?.errors }
+        data?.detail || data?.title || `Request failed (${response.status})`,
+        { status: response.status, fieldErrors: data?.errors }
     );
   }
 
@@ -52,12 +52,16 @@ function toQueryString(params) {
 /* ---------------- Auth — POST /api/auth/** (public) ---------------- */
 export const login = (email, password) => request('/api/auth/login', { method: 'POST', body: { email, password } });
 export const register = (name, email, password) =>
-  request('/api/auth/register', { method: 'POST', body: { name, email, password } });
+    request('/api/auth/register', { method: 'POST', body: { name, email, password } });
+
+/* ---------------- Users — /users ---------------- */
+// GET /users — returns { id, name, email } for every registered user
+export const listUsers = (token) => request('/users', { token });
 
 /* ---------------- Products — /api/products ---------------- */
 // GET /api/products?q=&category=&page=&size=&sort=
 export const listProducts = (token, { q, category, page, size, sort } = {}) =>
-  request(`/api/products${toQueryString({ q, category, page, size, sort })}`, { token });
+    request(`/api/products${toQueryString({ q, category, page, size, sort })}`, { token });
 
 // GET /api/products/{id}
 export const getProduct = (token, id) => request(`/api/products/${id}`, { token });
@@ -81,23 +85,23 @@ export const getOrder = (token, id) => request(`/api/orders/${id}`, { token });
 // PATCH /api/orders/{id}/status  body: {status}. Backend only allows forward transitions:
 // PLACED -> PAID -> SHIPPED -> DELIVERED (no cancellation path exists despite the CANCELLED enum value).
 export const updateOrderStatus = (token, id, status) =>
-  request(`/api/orders/${id}/status`, { method: 'PATCH', body: { status }, token });
+    request(`/api/orders/${id}/status`, { method: 'PATCH', body: { status }, token });
 
 /* ---------------- Tickets — /tickets (note: NOT under /api on the backend) ---------------- */
 // GET /tickets?status=&priority=&page=&size=&sort= — global list, not scoped to the caller
 export const listTickets = (token, { status, priority, page, size, sort } = {}) =>
-  request(`/tickets${toQueryString({ status, priority, page, size, sort })}`, { token });
+    request(`/tickets${toQueryString({ status, priority, page, size, sort })}`, { token });
 
 // POST /tickets/create  body: {customerId, title, description, priority, orderId?}
 export const createTicket = (token, body) => request('/tickets/create', { method: 'POST', body, token });
 
 // POST /tickets/{id}/assign  body: {agentId}
 export const assignTicket = (token, id, agentId) =>
-  request(`/tickets/${id}/assign`, { method: 'POST', body: { agentId }, token });
+    request(`/tickets/${id}/assign`, { method: 'POST', body: { agentId }, token });
 
 // POST /tickets/{id}/escalate  body: {reason}
 export const escalateTicket = (token, id, reason) =>
-  request(`/tickets/${id}/escalate`, { method: 'POST', body: { reason }, token });
+    request(`/tickets/${id}/escalate`, { method: 'POST', body: { reason }, token });
 
 /* ---------------- Chatbot (RAG) — /api/notes ---------------- */
 // POST /api/notes/ask  body: {question} -> returns a plain-text answer (not JSON),

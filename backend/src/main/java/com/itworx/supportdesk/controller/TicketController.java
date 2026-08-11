@@ -4,7 +4,7 @@ import com.itworx.supportdesk.dto.ticket.AssignTicketRequest;
 import com.itworx.supportdesk.dto.ticket.EscalateTicketRequest;
 import com.itworx.supportdesk.model.Ticket.Ticket;
 import com.itworx.supportdesk.dto.CreateTicketRequest;
-import com.itworx.supportdesk.dto.TicketResponse;
+import com.itworx.supportdesk.dto.ticket.TicketResponse;
 import com.itworx.supportdesk.model.Ticket.TicketPriority;
 import com.itworx.supportdesk.model.Ticket.TicketStatus;
 import com.itworx.supportdesk.service.TicketService;

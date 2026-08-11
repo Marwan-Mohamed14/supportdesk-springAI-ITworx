@@ -31,28 +31,28 @@ const TABS = [
 
 export default function AdminLayout() {
   return (
-    <div style={{ minHeight: "100vh", background: COLORS.ink, color: COLORS.white, fontFamily: FONT }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "10px 20px", borderBottom: `1px solid ${COLORS.line}`, overflowX: "auto" }}>
-        <nav style={{ display: "flex", gap: 4 }}>
-          {TABS.map(({ to, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              style={({ isActive }) => ({
-                padding: "6px 12px", borderRadius: 999, fontFamily: FONT, fontSize: 13, fontWeight: 600,
-                textDecoration: "none", whiteSpace: "nowrap",
-                color: isActive ? COLORS.white : COLORS.grey,
-                background: isActive ? "rgba(198,53,39,0.16)" : "transparent",
-                border: isActive ? `1px solid ${COLORS.red}` : "1px solid transparent",
-              })}
-            >
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-      </div>
+      <div style={{ minHeight: "100vh", background: COLORS.ink, color: COLORS.white, fontFamily: FONT }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "10px 20px", borderBottom: `1px solid ${COLORS.line}`, overflowX: "auto" }}>
+          <nav style={{ display: "flex", gap: 4 }}>
+            {TABS.map(({ to, label }) => (
+                <NavLink
+                    key={to}
+                    to={to}
+                    style={({ isActive }) => ({
+                      padding: "6px 12px", borderRadius: 999, fontFamily: FONT, fontSize: 13, fontWeight: 600,
+                      textDecoration: "none", whiteSpace: "nowrap",
+                      color: isActive ? COLORS.white : COLORS.grey,
+                      background: isActive ? "rgba(198,53,39,0.16)" : "transparent",
+                      border: isActive ? `1px solid ${COLORS.red}` : "1px solid transparent",
+                    })}
+                >
+                  {label}
+                </NavLink>
+            ))}
+          </nav>
+        </div>
 
-      <Outlet />
-    </div>
+        <Outlet />
+      </div>
   );
 }

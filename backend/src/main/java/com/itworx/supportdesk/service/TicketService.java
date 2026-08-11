@@ -1,7 +1,7 @@
 package com.itworx.supportdesk.service;
 
 import com.itworx.supportdesk.dto.CreateTicketRequest;
-import com.itworx.supportdesk.dto.TicketResponse;
+import com.itworx.supportdesk.dto.ticket.TicketResponse;
 import com.itworx.supportdesk.exception.InvalidTicketStateException;
 import com.itworx.supportdesk.exception.TicketNotFoundException;
 import com.itworx.supportdesk.exception.UserNotFoundException;
@@ -62,7 +62,7 @@ public class TicketService {
         ticket.setTitle(title);
         ticket.setDescription(description);
         ticketRepository.save(ticket);
-        return new TicketResponse(ticket);
+        return TicketResponse.from(ticket);
     }
 
     public Page<TicketResponse> ListAndFilter(TicketStatus status, TicketPriority priority, Pageable pageable) {
@@ -76,7 +76,7 @@ public class TicketService {
         } else {
             tickets = ticketRepository.findAll(pageable);
         }
-        return tickets.map(TicketResponse::new);
+        return tickets.map(TicketResponse::from);
     }
 
 @Transactional
