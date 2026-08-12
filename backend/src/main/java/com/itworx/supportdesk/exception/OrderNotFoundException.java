@@ -1,0 +1,18 @@
+package com.itworx.supportdesk.exception;
+
+import java.util.UUID;
+
+public class OrderNotFoundException extends RuntimeException {
+
+    public OrderNotFoundException(UUID id) {
+        super("Order not found: " + id);
+    }
+
+    public OrderNotFoundException(String message) {
+        super(message);
+    }
+
+    public static OrderNotFoundException forId(UUID id) {
+        return new OrderNotFoundException(id);
+    }
+}

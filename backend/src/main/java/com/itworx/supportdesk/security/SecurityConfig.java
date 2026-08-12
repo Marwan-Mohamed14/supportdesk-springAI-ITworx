@@ -107,6 +107,18 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/products/**").hasRole("ADMIN")
 
+                        // Admin-only: real metrics summary (Epic L2)
+                        .requestMatchers("/api/metrics/**").hasRole("ADMIN")
+
+                        // Admin-only: knowledge base management (Epic F)
+                        .requestMatchers("/api/kb/**").hasRole("ADMIN")
+
+                        // Admin-only: refund approvals (Epic H)
+                        .requestMatchers("/api/refunds/**").hasRole("ADMIN")
+
+                        // Admin-only: audit trail (Epic K)
+                        .requestMatchers("/api/audit/**").hasRole("ADMIN")
+
                         // Everything else just needs a valid, authenticated caller
                         .anyRequest().authenticated()
                 )

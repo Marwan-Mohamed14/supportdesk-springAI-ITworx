@@ -110,6 +110,36 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.BAD_GATEWAY, "AI Service Error", ex.getMessage());
     }
 
+    @ExceptionHandler(KbArticleNotFoundException.class)
+    public ProblemDetail handleKbArticleNotFound(KbArticleNotFoundException ex) {
+        return problem(HttpStatus.NOT_FOUND, "Article Not Found", ex.getMessage());
+    }
+
+    @ExceptionHandler(RefundNotFoundException.class)
+    public ProblemDetail handleRefundNotFound(RefundNotFoundException ex) {
+        return problem(HttpStatus.NOT_FOUND, "Refund Not Found", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidRefundStateException.class)
+    public ProblemDetail handleInvalidRefundState(InvalidRefundStateException ex) {
+        return problem(HttpStatus.CONFLICT, "Invalid Refund State", ex.getMessage());
+    }
+
+    @ExceptionHandler(RefundNoteRequiredException.class)
+    public ProblemDetail handleRefundNoteRequired(RefundNoteRequiredException ex) {
+        return problem(HttpStatus.BAD_REQUEST, "Justification Required", ex.getMessage());
+    }
+
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ProblemDetail handleOrderNotFound(OrderNotFoundException ex) {
+        return problem(HttpStatus.NOT_FOUND, "Order Not Found", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidOrderStatusTransitionException.class)
+    public ProblemDetail handleInvalidOrderStatusTransition(InvalidOrderStatusTransitionException ex) {
+        return problem(HttpStatus.CONFLICT, "Invalid Order Status Transition", ex.getMessage());
+    }
+
     private ProblemDetail problem(HttpStatus status, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
         pd.setTitle(title);

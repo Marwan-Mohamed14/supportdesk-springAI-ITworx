@@ -1,8 +1,9 @@
-import React, { useState, useMemo, Fragment } from "react";
+import React, { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import {
   COLORS, FONT, Icon, DemoLoginPanel, AdminPageHeader, useAdminAuth, useToasts, Toasts,
   Modal, fieldLabel, inputStyle, StatChip, StatDivider, AdminOnlyGate,
 } from "./admin-shared.jsx";
+import { listKbArticles, createKbArticle, updateKbArticle, ingestKbArticle, ingestAllKbArticles } from "../../lib/api.js";
 
 /* ============================================================
    Epic F — Knowledge Base (author + ingest)
@@ -18,28 +19,20 @@ import {
        before Epic A is wired in. Delete the fallback once real auth exists.
      - Admin-only: there is no agent-facing view of this page (story A2).
 
-   Backend contract (Spring):
-     GET    /api/kb/articles?q=&category=&status=
-     POST   /api/kb/articles          body: {title, category, tags[], body}
-     PUT    /api/kb/articles/{id}     body: {title, category, tags[], body}
-     POST   /api/kb/ingest            body: {articleId?}  (omit to re-ingest all)
-   MOCK_MODE seeds local data so this page runs without a backend; swap in
-   real fetch() calls per the endpoints above. Story F2: re-ingesting an
-   article must replace its old vector-store chunks, not duplicate them —
-   that's a backend concern once real ingest exists.
+   Backed by the real backend: /api/kb/articles (ADMIN only, see
+   SecurityConfig). `token` is supplied by withAdminAuth alongside `auth` —
+   the demo login fallback above has no real token, so it shows an
+   explanatory message instead of a confusing fetch failure.
+
+   Scope note (story F2): "re-ingest" here means what the backend can
+   honestly do today — mark the article published and stamp when. It does
+   NOT push the article's body into the chatbot's vector store yet; that's
+   a separate, larger change to the existing RAG pipeline (AiConfig /
+   KnowledgeBaseLoader / ChatbotService) and is intentionally out of scope
+   here so this fix can't destabilize the chatbot feature.
    ============================================================ */
 
 const CATEGORIES = ["Policies", "Shipping", "Warranty", "Account", "Security"];
-
-function seedArticles() {
-  return [
-    { id: 1, title: "Return & refund policy", category: "Policies", tags: ["refunds", "returns"], status: "published", lastIngested: "2026-08-01", body: "" },
-    { id: 2, title: "Shipping timelines by region", category: "Shipping", tags: ["shipping"], status: "published", lastIngested: "2026-07-28", body: "" },
-    { id: 3, title: "Warranty claims — storage devices", category: "Warranty", tags: ["warranty", "storage"], status: "stale", lastIngested: "2026-06-14", body: "" },
-    { id: 4, title: "How to reset a customer password", category: "Account", tags: ["account", "security"], status: "draft", lastIngested: null, body: "" },
-    { id: 5, title: "Bulk order discount tiers", category: "Policies", tags: ["orders", "pricing"], status: "published", lastIngested: "2026-07-30", body: "" },
-  ];
-}
 
 function StatusChip({ status }) {
   const map = {
@@ -55,9 +48,9 @@ function StatusChip({ status }) {
   );
 }
 
-function ArticleForm({ initial, onSubmit, onCancel, error }) {
+function ArticleForm({ initial, onSubmit, onCancel, error, submitting }) {
   const isEdit = !!initial;
-  const [form, setForm] = useState(initial ? { ...initial, tags: initial.tags.join(", ") } : { title: "", category: CATEGORIES[0], tags: "", body: "" });
+  const [form, setForm] = useState(initial ? { ...initial, tags: (initial.tags || []).join(", ") } : { title: "", category: CATEGORIES[0], tags: "", body: "" });
   const [localErr, setLocalErr] = useState("");
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const submit = () => {
@@ -81,9 +74,9 @@ function ArticleForm({ initial, onSubmit, onCancel, error }) {
       {(localErr || error) && <div style={{ fontSize: 12.5, color: COLORS.red, fontFamily: FONT }}>{localErr || error}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
         <button onClick={onCancel} style={{ flex: 1, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 9, padding: "10px 0", fontFamily: FONT, fontSize: 13.5, cursor: "pointer" }}>Cancel</button>
-        <button onClick={submit} style={{ flex: 1, background: COLORS.red, border: "none", color: COLORS.white, borderRadius: 9, padding: "10px 0", fontFamily: FONT, fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}
-          onMouseEnter={e => e.currentTarget.style.background = COLORS.redDark} onMouseLeave={e => e.currentTarget.style.background = COLORS.red}>
-          {isEdit ? "Save changes" : "Create article"}
+        <button onClick={submit} disabled={submitting} style={{ flex: 1, background: COLORS.red, border: "none", color: COLORS.white, borderRadius: 9, padding: "10px 0", fontFamily: FONT, fontWeight: 600, fontSize: 13.5, cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1 }}
+          onMouseEnter={e => !submitting && (e.currentTarget.style.background = COLORS.redDark)} onMouseLeave={e => !submitting && (e.currentTarget.style.background = COLORS.red)}>
+          {submitting ? "Saving…" : isEdit ? "Save changes" : "Create article"}
         </button>
       </div>
     </div>
@@ -95,22 +88,54 @@ function ArticleForm({ initial, onSubmit, onCancel, error }) {
    Props:
      auth      — { displayName, role: "AGENT"|"ADMIN", expiresAt } | null
      onSignOut — called when the user clicks "Sign out".
+     token     — real JWT, supplied by withAdminAuth; absent when using
+                 the demo-login fallback below.
    ============================================================ */
-export default function KnowledgeBasePage({ auth: authProp, onSignOut }) {
+export default function KnowledgeBasePage({ auth: authProp, onSignOut, token }) {
   const { toasts, pushToast, dismiss } = useToasts();
   const { auth, usingDemoAuth, now, setDemoAuth, handleSignOut, role } = useAdminAuth(authProp, onSignOut, pushToast);
 
-  const [articles, setArticles] = useState(seedArticles);
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [ingestingId, setIngestingId] = useState(null);
+  const [ingestingAll, setIngestingAll] = useState(false);
+
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [status, setStatus] = useState("all");
   const [modal, setModal] = useState(null);
   const [modalError, setModalError] = useState("");
+  const [modalSubmitting, setModalSubmitting] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!token) {
+      setArticles([]);
+      setError("This demo login has no real backend session — sign in through the actual app to manage the real knowledge base.");
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await listKbArticles(token);
+      setArticles(data);
+      setError(null);
+    } catch (err) {
+      setArticles([]);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (auth && role === "ADMIN") load();
+  }, [auth, role, load]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return articles.filter(a => {
-      const matchesQ = !q || a.title.toLowerCase().includes(q) || a.tags.some(t => t.toLowerCase().includes(q));
+      const matchesQ = !q || a.title.toLowerCase().includes(q) || (a.tags || []).some(t => t.toLowerCase().includes(q));
       const matchesCat = category === "All" || a.category === category;
       const matchesStatus = status === "all" || a.status === status;
       return matchesQ && matchesCat && matchesStatus;
@@ -124,25 +149,58 @@ export default function KnowledgeBasePage({ auth: authProp, onSignOut }) {
     draft: articles.filter(a => a.status === "draft").length,
   }), [articles]);
 
-  const handleCreate = (form) => {
-    const nextId = Math.max(0, ...articles.map(a => a.id)) + 1;
-    setArticles(list => [{ id: nextId, ...form, status: "draft", lastIngested: null }, ...list]);
-    setModal(null); setModalError(""); pushToast(`Created "${form.title}" as a draft.`);
+  const handleCreate = async (form) => {
+    setModalSubmitting(true);
+    try {
+      const created = await createKbArticle(token, { title: form.title, category: form.category, tags: form.tags, body: form.body });
+      setArticles(list => [created, ...list]);
+      setModal(null); setModalError("");
+      pushToast(`Created "${created.title}" as a draft.`);
+    } catch (err) {
+      setModalError(err.message);
+    } finally {
+      setModalSubmitting(false);
+    }
   };
-  const handleUpdate = (form) => {
-    setArticles(list => list.map(a => a.id === modal.article.id ? { ...a, ...form, status: "stale" } : a));
-    setModal(null); setModalError(""); pushToast(`Saved "${form.title}" — marked for re-ingest.`);
+
+  const handleUpdate = async (form) => {
+    setModalSubmitting(true);
+    try {
+      const updated = await updateKbArticle(token, modal.article.id, { title: form.title, category: form.category, tags: form.tags, body: form.body });
+      setArticles(list => list.map(a => a.id === updated.id ? updated : a));
+      setModal(null); setModalError("");
+      pushToast(`Saved "${updated.title}" — marked for re-ingest.`);
+    } catch (err) {
+      setModalError(err.message);
+    } finally {
+      setModalSubmitting(false);
+    }
   };
-  const ingestOne = (id) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const a = articles.find(x => x.id === id);
-    setArticles(list => list.map(x => x.id === id ? { ...x, status: "published", lastIngested: today } : x));
-    pushToast(`"${a.title}" re-ingested — old chunks replaced, no stale duplicates (story F2).`);
+
+  const ingestOne = async (id) => {
+    setIngestingId(id);
+    try {
+      const updated = await ingestKbArticle(token, id);
+      setArticles(list => list.map(a => a.id === id ? updated : a));
+      pushToast(`"${updated.title}" marked as re-ingested.`);
+    } catch (err) {
+      pushToast(err.message, "error");
+    } finally {
+      setIngestingId(null);
+    }
   };
-  const ingestAll = () => {
-    const today = new Date().toISOString().slice(0, 10);
-    setArticles(list => list.map(a => ({ ...a, status: "published", lastIngested: today })));
-    pushToast("Re-ingested all articles.");
+
+  const ingestAll = async () => {
+    setIngestingAll(true);
+    try {
+      const updated = await ingestAllKbArticles(token);
+      setArticles(updated);
+      pushToast("Re-ingested all articles.");
+    } catch (err) {
+      pushToast(err.message, "error");
+    } finally {
+      setIngestingAll(false);
+    }
   };
 
   return (
@@ -160,13 +218,31 @@ export default function KnowledgeBasePage({ auth: authProp, onSignOut }) {
       ) : (
         <Fragment>
           <div style={{ borderBottom: `1px solid ${COLORS.line}`, padding: "16px 28px", overflowX: "auto" }}>
-            <div style={{ display: "flex", maxWidth: 1320, margin: "0 auto" }}>
-              <StatChip label="Total articles" value={stats.total} />
-              <StatDivider /><StatChip label="Published" value={stats.published} color={COLORS.green} />
-              <StatDivider /><StatChip label="Needs re-ingest" value={stats.stale} color={COLORS.yellow} />
-              <StatDivider /><StatChip label="Drafts" value={stats.draft} color={COLORS.greyDim} />
+            <div style={{ display: "flex", maxWidth: 1320, margin: "0 auto", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+              <div style={{ display: "flex" }}>
+                <StatChip label="Total articles" value={loading ? "…" : stats.total} />
+                <StatDivider /><StatChip label="Published" value={loading ? "…" : stats.published} color={COLORS.green} />
+                <StatDivider /><StatChip label="Needs re-ingest" value={loading ? "…" : stats.stale} color={COLORS.yellow} />
+                <StatDivider /><StatChip label="Drafts" value={loading ? "…" : stats.draft} color={COLORS.greyDim} />
+              </div>
+              <button onClick={load} disabled={loading || !token} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 9, padding: "8px 14px", fontFamily: FONT, fontSize: 12.5, cursor: loading || !token ? "default" : "pointer", opacity: loading || !token ? 0.6 : 1 }}>
+                <Icon name="refreshCw" size={13} /> {loading ? "Refreshing…" : "Refresh"}
+              </button>
             </div>
           </div>
+
+          {error && (
+            <div style={{ maxWidth: 1320, margin: "16px auto 0", padding: "0 28px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: "rgba(198,53,39,0.1)", border: `1px solid ${COLORS.red}`, borderRadius: 12, padding: "12px 16px", fontFamily: FONT, fontSize: 13 }}>
+                <span>{token ? `Couldn't load articles — ${error}` : error}</span>
+                {token && (
+                  <button onClick={load} style={{ background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.white, borderRadius: 8, padding: "6px 12px", fontFamily: FONT, fontSize: 12, cursor: "pointer" }}>
+                    Retry
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           <div style={{ maxWidth: 1320, margin: "0 auto", padding: "24px 28px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
@@ -185,19 +261,19 @@ export default function KnowledgeBasePage({ auth: authProp, onSignOut }) {
                   <option value="draft">Draft</option>
                   <option value="stale">Needs re-ingest</option>
                 </select>
-                <button onClick={ingestAll} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 9, padding: "0 14px", fontFamily: FONT, fontSize: 12.5, cursor: "pointer" }}>
-                  <Icon name="refreshCw" size={13} /> Re-ingest all
+                <button onClick={ingestAll} disabled={ingestingAll || !token || articles.length === 0} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 9, padding: "0 14px", fontFamily: FONT, fontSize: 12.5, cursor: ingestingAll || !token || articles.length === 0 ? "default" : "pointer", opacity: ingestingAll || !token || articles.length === 0 ? 0.6 : 1 }}>
+                  <Icon name="refreshCw" size={13} /> {ingestingAll ? "Re-ingesting…" : "Re-ingest all"}
                 </button>
-                <button onClick={() => { setModal({ mode: "create" }); setModalError(""); }} style={{ display: "flex", alignItems: "center", gap: 6, background: COLORS.white, color: COLORS.ink, border: "none", borderRadius: 999, padding: "0 16px", fontFamily: FONT, fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}>
+                <button onClick={() => { setModal({ mode: "create" }); setModalError(""); }} disabled={!token} style={{ display: "flex", alignItems: "center", gap: 6, background: COLORS.white, color: COLORS.ink, border: "none", borderRadius: 999, padding: "0 16px", fontFamily: FONT, fontWeight: 600, fontSize: 12.5, cursor: token ? "pointer" : "default", opacity: token ? 1 : 0.6 }}>
                   <Icon name="plus" size={14} /> New article
                 </button>
               </div>
             </div>
 
-            {filtered.length === 0 ? (
+            {!loading && filtered.length === 0 ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "70px 0", border: `1px dashed ${COLORS.line}`, borderRadius: 16 }}>
                 <Icon name="bookOpen" size={26} color={COLORS.greyDim} />
-                <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15 }}>No articles match these filters.</div>
+                <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15 }}>{articles.length === 0 ? "No articles yet." : "No articles match these filters."}</div>
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -206,17 +282,17 @@ export default function KnowledgeBasePage({ auth: authProp, onSignOut }) {
                     <Icon name="bookOpen" size={18} color={COLORS.grey} />
                     <div style={{ flex: 1, minWidth: 200 }}>
                       <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: COLORS.white }}>{a.title}</div>
-                      <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.grey, marginTop: 3 }}>{a.category} · {a.tags.join(", ") || "no tags"}</div>
+                      <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.grey, marginTop: 3 }}>{a.category} · {(a.tags || []).join(", ") || "no tags"}</div>
                     </div>
                     <StatusChip status={a.status} />
                     <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.greyDim, minWidth: 110 }}>
-                      {a.lastIngested ? `Ingested ${a.lastIngested}` : "Never ingested"}
+                      {a.lastIngestedAt ? `Ingested ${new Date(a.lastIngestedAt).toLocaleDateString()}` : "Never ingested"}
                     </div>
                     <button onClick={() => { setModal({ mode: "edit", article: a }); setModalError(""); }} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 8, padding: "6px 11px", fontFamily: FONT, fontSize: 12, cursor: "pointer" }}>
                       <Icon name="pencil" size={12} /> Edit
                     </button>
-                    <button onClick={() => ingestOne(a.id)} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 8, padding: "6px 11px", fontFamily: FONT, fontSize: 12, cursor: "pointer" }}>
-                      <Icon name="refreshCw" size={12} /> Re-ingest
+                    <button onClick={() => ingestOne(a.id)} disabled={ingestingId === a.id} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 8, padding: "6px 11px", fontFamily: FONT, fontSize: 12, cursor: ingestingId === a.id ? "default" : "pointer", opacity: ingestingId === a.id ? 0.6 : 1 }}>
+                      <Icon name="refreshCw" size={12} /> {ingestingId === a.id ? "Re-ingesting…" : "Re-ingest"}
                     </button>
                   </div>
                 ))}
@@ -225,15 +301,16 @@ export default function KnowledgeBasePage({ auth: authProp, onSignOut }) {
           </div>
 
           {modal && (
-            <Modal title={modal.mode === "edit" ? "Edit article" : "New KB article"} onClose={() => setModal(null)}>
+            <Modal title={modal.mode === "edit" ? "Edit article" : "New KB article"} onClose={() => !modalSubmitting && setModal(null)}>
               <div style={{ fontFamily: FONT, fontSize: 12.5, color: COLORS.grey, marginBottom: 16 }}>
-                Content saved here is used to ground the assistant's answers once ingested.
+                Saved for real now — but re-ingesting only updates this article's status here; it doesn't yet feed the assistant's actual answers (that part of the pipeline isn't wired up).
               </div>
               <ArticleForm
                 initial={modal.mode === "edit" ? modal.article : null}
                 onSubmit={modal.mode === "edit" ? handleUpdate : handleCreate}
                 onCancel={() => setModal(null)}
                 error={modalError}
+                submitting={modalSubmitting}
               />
             </Modal>
           )}

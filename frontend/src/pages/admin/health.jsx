@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { COLORS, FONT } from "./admin-shared.jsx";
+import { COLORS, FONT, Icon } from "./admin-shared.jsx";
 
 const ACTUATOR_URL =
     (import.meta.env.VITE_API_URL || "http://localhost:8080") + "/actuator/health";
@@ -11,76 +11,86 @@ const STATUS_COLOR = {
   UNKNOWN: COLORS.grey,
 };
 
-function StatusDot({ status }) {
-  const color = STATUS_COLOR[status] || COLORS.grey;
+function formatBytes(n) {
+  if (typeof n !== "number") return String(n);
+  return `${(n / 1024 ** 3).toFixed(1)} GB`;
+}
+
+// "diskSpace" -> "Disk Space", "livenessState" -> "Liveness State"
+function formatComponentLabel(name) {
+  const spaced = name.replace(/([A-Z])/g, " $1");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+// Friendly, human-readable subtitle per known actuator component — falls
+// back to a generic summary of whatever `details` came back for anything
+// unrecognized.
+function describeComponent(name, data) {
+  const d = data?.details;
+  switch (name) {
+    case "overall":
+      return data?.status === "UP" ? "All systems operational" : "One or more components are down";
+    case "db":
+      return d?.database ? `${d.database} · connection healthy` : "Connection healthy";
+    case "diskSpace":
+      return d ? `${formatBytes(d.free)} free of ${formatBytes(d.total)}` : null;
+    case "livenessState":
+      return "Application process check";
+    case "readinessState":
+      return "Ready to accept traffic";
+    case "ping":
+      return "Basic connectivity check";
+    case "ssl":
+      return d ? `${d.validChains?.length ?? 0} valid certificate chain(s)` : null;
+    default:
+      if (!d) return null;
+      return Object.entries(d).slice(0, 2)
+          .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`)
+          .join(" · ");
+  }
+}
+
+function StatusPill({ status, large }) {
+  const map = {
+    UP: { label: "Up", color: COLORS.green },
+    DOWN: { label: "Down", color: COLORS.red },
+    OUT_OF_SERVICE: { label: "Down", color: COLORS.red },
+    UNKNOWN: { label: "Unknown", color: COLORS.grey },
+  };
+  const s = map[status] || map.UNKNOWN;
   return (
-      <span
-          style={{
-            display: "inline-block",
-            width: 10,
-            height: 10,
-            borderRadius: "50%",
-            background: color,
-            boxShadow: status === "UP" ? `0 0 8px ${color}` : "none",
-          }}
-      />
+      <span style={{ display: "inline-flex", alignItems: "center", gap: large ? 7 : 5, fontFamily: FONT, fontSize: large ? 13 : 11, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: s.color, background: "rgba(255,255,255,0.06)", borderRadius: 999, padding: large ? "6px 14px" : "3px 9px" }}>
+      <span style={{ width: large ? 8 : 6, height: large ? 8 : 6, borderRadius: "50%", background: s.color }} /> {s.label}
+    </span>
   );
 }
 
-function ComponentCard({ name, data }) {
+function ComponentBar({ name, data, emphasize }) {
   const status = data?.status || "UNKNOWN";
-  const details = data?.details;
+  const subtitle = describeComponent(name, data);
+  const statusColor = STATUS_COLOR[status] || COLORS.grey;
+
+  if (emphasize) {
+    return (
+        <div style={{ background: COLORS.panelHi, border: `1.5px solid ${statusColor}`, borderRadius: 18, padding: "22px 26px", display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", boxShadow: `0 0 0 1px rgba(255,255,255,0.02), 0 8px 24px rgba(0,0,0,0.25)` }}>
+          <Icon name="shield" size={28} color={statusColor} />
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: COLORS.white }}>{formatComponentLabel(name)}</div>
+            {subtitle && <div style={{ fontFamily: FONT, fontSize: 14, color: COLORS.grey, marginTop: 4 }}>{subtitle}</div>}
+          </div>
+          <StatusPill status={status} large />
+        </div>
+    );
+  }
 
   return (
-      <div
-          style={{
-            background: COLORS.panel,
-            border: `1px solid ${status === "DOWN" ? COLORS.red : COLORS.line}`,
-            borderRadius: 10,
-            padding: 16,
-          }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <StatusDot status={status} />
-            <span style={{ fontWeight: 600, fontSize: 14, textTransform: "capitalize" }}>
-            {name}
-          </span>
-          </div>
-          <span
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: 0.4,
-                color: STATUS_COLOR[status] || COLORS.grey,
-              }}
-          >
-          {status}
-        </span>
+      <div style={{ background: COLORS.panel, border: `1px solid ${status === "DOWN" ? COLORS.red : COLORS.line}`, borderRadius: 14, padding: 16, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        <Icon name="shield" size={18} color={COLORS.grey} />
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: COLORS.white }}>{formatComponentLabel(name)}</div>
+          {subtitle && <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.grey, marginTop: 3 }}>{subtitle}</div>}
         </div>
-
-        {details && (
-            <div
-                style={{
-                  marginTop: 10,
-                  paddingTop: 10,
-                  borderTop: `1px solid ${COLORS.line}`,
-                  fontSize: 12,
-                  color: COLORS.greyDim,
-                  display: "grid",
-                  gap: 4,
-                }}
-            >
-              {Object.entries(details).map(([key, value]) => (
-                  <div key={key} style={{ display: "flex", gap: 8 }}>
-                    <span style={{ minWidth: 90, color: COLORS.grey }}>{key}</span>
-                    <span style={{ wordBreak: "break-word" }}>
-                {typeof value === "object" ? JSON.stringify(value) : String(value)}
-              </span>
-                  </div>
-              ))}
-            </div>
-        )}
+        <StatusPill status={status} />
       </div>
   );
 }
@@ -120,77 +130,66 @@ export default function SystemHealthPage() {
 
   const overallStatus = health?.status || (error ? "DOWN" : "UNKNOWN");
   const components = health?.components || {};
+  const componentEntries = Object.entries(components);
 
   return (
-      <div style={{ fontFamily: FONT, color: COLORS.white, padding: "24px 28px", maxWidth: 900 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>System Health</h1>
-            <p style={{ fontSize: 13, color: COLORS.greyDim, margin: "4px 0 0" }}>
-              Live status from <code>/actuator/health</code>
-              {lastChecked && ` — last checked ${lastChecked.toLocaleTimeString()}`}
-            </p>
-          </div>
-          <button
-              onClick={checkHealth}
-              disabled={loading}
-              style={{
-                background: COLORS.panelHi,
-                color: COLORS.white,
-                border: `1px solid ${COLORS.line}`,
-                borderRadius: 8,
-                padding: "8px 16px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: loading ? "default" : "pointer",
-                opacity: loading ? 0.6 : 1,
-              }}
-          >
-            {loading ? "Checking…" : "Refresh now"}
-          </button>
-        </div>
-        <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              background: COLORS.panel,
-              border: `1px solid ${overallStatus === "DOWN" ? COLORS.red : COLORS.line}`,
-              borderRadius: 10,
-              padding: "16px 20px",
-              marginBottom: 20,
-            }}
-        >
-          <StatusDot status={overallStatus} />
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>
-              {overallStatus === "UP" && "All systems operational"}
-              {overallStatus === "DOWN" && "Something is down"}
-              {overallStatus === "UNKNOWN" && "Checking status…"}
-            </div>
-            {error && (
-                <div style={{ fontSize: 13, color: COLORS.red, marginTop: 2 }}>{error}</div>
-            )}
-          </div>
-        </div>
-        {Object.keys(components).length > 0 && (
-            <>
-              <h2 style={{ fontSize: 13, fontWeight: 700, color: COLORS.greyDim, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>
-                Components
-              </h2>
-              <div style={{ display: "grid", gap: 10 }}>
-                {Object.entries(components).map(([name, data]) => (
-                    <ComponentCard key={name} name={name} data={data} />
-                ))}
+      <div style={{ minHeight: "100vh", fontFamily: FONT, color: COLORS.white }}>
+        <div style={{ borderBottom: `1px solid ${COLORS.line}`, padding: "16px 28px" }}>
+          <div style={{ maxWidth: 1320, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15 }}>
+                System Health <span style={{ color: COLORS.grey, fontWeight: 400 }}>· /actuator/health</span>
               </div>
-            </>
-        )}
+              <p style={{ fontSize: 12.5, color: COLORS.greyDim, margin: "4px 0 0", fontFamily: FONT }}>
+                {lastChecked ? `Last checked ${lastChecked.toLocaleTimeString()}` : "Checking…"}
+                {error && <span style={{ color: COLORS.red }}> — {error}</span>}
+              </p>
+            </div>
+            <button
+                onClick={checkHealth}
+                disabled={loading}
+                style={{
+                  background: COLORS.panelHi,
+                  color: COLORS.white,
+                  border: `1px solid ${COLORS.line}`,
+                  borderRadius: 8,
+                  padding: "8px 16px",
+                  fontSize: 13,
+                  fontFamily: FONT,
+                  fontWeight: 600,
+                  cursor: loading ? "default" : "pointer",
+                  opacity: loading ? 0.6 : 1,
+                }}
+            >
+              {loading ? "Checking…" : "Refresh now"}
+            </button>
+          </div>
+        </div>
 
-        <p style={{ fontSize: 12, color: COLORS.greyDim, marginTop: 24 }}>
-          Auto-refreshes every 15 seconds. If the database (<code>db</code>) shows{" "}
-          <span style={{ color: COLORS.red, fontWeight: 600 }}>DOWN</span>, that's your first
-          place to check — before digging through logs.
-        </p>
+        <div style={{ maxWidth: 1320, margin: "0 auto", padding: "24px 28px" }}>
+          <div style={{ marginBottom: 18 }}>
+            <ComponentBar
+                name="overall"
+                data={{
+                  status: overallStatus,
+                  details: null,
+                }}
+                emphasize
+            />
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {componentEntries.map(([name, data]) => (
+                <ComponentBar key={name} name={name} data={data} />
+            ))}
+          </div>
+
+          <p style={{ fontSize: 12, color: COLORS.greyDim, marginTop: 24, fontFamily: FONT }}>
+            Auto-refreshes every 15 seconds. If the database (<code>db</code>) shows{" "}
+            <span style={{ color: COLORS.red, fontWeight: 600 }}>DOWN</span>, that's your first
+            place to check — before digging through logs.
+          </p>
+        </div>
       </div>
   );
 }

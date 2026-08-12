@@ -20,4 +20,9 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     // ticket (see TicketService#createTicketFromChatAndAssign).
     long countByAssignedAgentAndStatusIn(User assignedAgent, List<TicketStatus> statuses);
 
+    // Used by MetricsService (Epic L2) for real, database-backed operational numbers.
+    long countByStatusNot(TicketStatus status);
+    long countByStatus(TicketStatus status);
+    List<Ticket> findByStatus(TicketStatus status);
+
 }

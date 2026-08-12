@@ -8,7 +8,9 @@ import com.itworx.supportdesk.dto.order.UpdateOrderStatusRequest;
 import com.itworx.supportdesk.entity.Product;
 import com.itworx.supportdesk.exception.CustomerNotFoundException;
 import com.itworx.supportdesk.exception.InsufficientStockException;
+import com.itworx.supportdesk.exception.InvalidOrderStatusTransitionException;
 import com.itworx.supportdesk.exception.InvalidProductStateException;
+import com.itworx.supportdesk.exception.OrderNotFoundException;
 import com.itworx.supportdesk.exception.ProductNotFoundException;
 import com.itworx.supportdesk.model.OrderItem;
 import com.itworx.supportdesk.model.User;
@@ -42,7 +44,7 @@ public class OrderService {
     @Transactional(readOnly = true)
     public OrderResponse getOrderById(UUID id) {
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Order not found with id: " + id));
+                .orElseThrow(() -> OrderNotFoundException.forId(id));
 
         return mapToOrderResponse(order);
     }
@@ -84,13 +86,14 @@ public class OrderService {
     @Transactional
     public OrderResponse updateOrderStatus(UUID id, UpdateOrderStatusRequest request) {
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Order not found with id: " + id));
+                .orElseThrow(() -> OrderNotFoundException.forId(id));
 
         OrderStatus currentStatus = order.getStatus();
         OrderStatus newStatus = request.status();
 
         if (!isValidTransition(currentStatus, newStatus)) {
-            throw new IllegalArgumentException("Invalid status transition from " + currentStatus + " to " + newStatus);
+            throw new InvalidOrderStatusTransitionException(
+                    "Invalid status transition from " + currentStatus + " to " + newStatus);
         }
 
         order.setStatus(newStatus);

@@ -1,35 +1,23 @@
-import React, { useState, useMemo, Fragment } from "react";
+import React, { useState, useEffect, useMemo, Fragment } from "react";
 import {
   COLORS, FONT, Icon, DemoLoginPanel, AdminPageHeader, useAdminAuth, useToasts, Toasts,
   fieldLabel, inputStyle, StatChip, StatDivider, AdminOnlyGate,
 } from "./admin-shared.jsx";
+import { listAuditEntries, ApiError } from "../../lib/api.js";
 
 /* ============================================================
    Epic K — Audit Trail
    ------------------------------------------------------------
-   Scoped to just this epic on purpose, same as pages/products/catalog.jsx:
-     - No app shell / router / nav here — a page component, meant to be
-       routed to from a shared App.jsx once the frontend project is
-       scaffolded.
-     - Auth is NOT reimplemented here. Accepts the logged-in user via the
-       `auth` prop: auth = { displayName, role: "AGENT"|"ADMIN", expiresAt }
-       and calls `onSignOut()` on sign-out. Falls back to a local demo
-       login (admin-only) so this page works standalone in `npm run dev`
-       before Epic A is wired in. Delete the fallback once real auth exists.
-     - Admin-only: there is no agent-facing view of this page (story A2).
+   Wired to the real backend now: GET /api/audit?q=&action=&actor=&from=&to=
+   Real rows are written server-side by whichever endpoint performed the
+   action (see AuditLogService.record(...)) — this page stays read-only,
+   it never writes anything itself.
 
-   Story K4 — every tool action the assistant (or an admin) takes against
-   a customer's data must be recorded and reviewable: who/what did it,
-   when, on which target, and the outcome. This page is strictly
-   read-only — it never mutates anything, it just displays what the
-   backend already recorded.
-
-   Backend contract (Spring):
-     GET /api/audit?q=&action=&actor=&from=&to=
-   Real entries are written server-side by whichever endpoint performed
-   the action (refund approve/reject, KB create/edit/ingest, etc.) — this
-   page does not write audit rows itself, it only reads them.
-   MOCK_MODE seeds local data so this page runs without a backend.
+   IMPORTANT: only refund approve/reject write real rows today (see
+   RefundServiceImpl). KB edits, ticket escalations, and logins aren't
+   instrumented to call AuditLogService.record(...) yet, so you won't see
+   those action types here until that's added as a follow-up — the list
+   below will look sparse compared to the old 8-entry demo mock until then.
    ============================================================ */
 
 const ACTION_META = {
@@ -42,37 +30,49 @@ const ACTION_META = {
   ticket_escalated: { label: "Ticket escalated", color: COLORS.yellow, icon: "alertTriangle" },
 };
 
-function seedEntries() {
-  return [
-    { id: "AU-3001", timestamp: "2026-08-04 09:02", actor: "Karim (ADMIN)", action: "refund_approved", target: "RF-1003 · Lina Sabry", detail: "Approved $18.99 — confirmed duplicate in billing system." },
-    { id: "AU-3002", timestamp: "2026-08-04 08:55", actor: "AI Assistant", action: "ticket_escalated", target: "TCK-7742", detail: "Escalated to human agent — customer requested manager." },
-    { id: "AU-3003", timestamp: "2026-08-03 17:10", actor: "Karim (ADMIN)", action: "refund_rejected", target: "RF-1004 · Youssef Amin", detail: "Rejected $610.00 — cancellation window had closed." },
-    { id: "AU-3004", timestamp: "2026-08-03 15:40", actor: "Karim (ADMIN)", action: "kb_updated", target: "Warranty claims — storage devices", detail: "Edited body text, tags unchanged." },
-    { id: "AU-3005", timestamp: "2026-08-03 15:41", actor: "Karim (ADMIN)", action: "kb_ingested", target: "Warranty claims — storage devices", detail: "Re-ingested after edit — old chunks replaced." },
-    { id: "AU-3006", timestamp: "2026-08-02 11:05", actor: "Karim (ADMIN)", action: "login", target: "—", detail: "Signed in from admin console." },
-    { id: "AU-3007", timestamp: "2026-08-01 13:22", actor: "Sara (AGENT)", action: "ticket_escalated", target: "TCK-7699", detail: "Escalated — needed refund above agent authority." },
-    { id: "AU-3008", timestamp: "2026-07-30 10:12", actor: "Karim (ADMIN)", action: "kb_created", target: "Bulk order discount tiers", detail: "New article created as draft." },
-  ];
+function formatDate(iso) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return iso;
+  }
 }
 
 /* ============================================================
    Default export — the actual page.
    Props:
      auth      — { displayName, role: "AGENT"|"ADMIN", expiresAt } | null
+     token     — bearer token, forwarded by withAdminAuth, used to call the
+                 real /api/audit endpoint below.
      onSignOut — called when the user clicks "Sign out".
    ============================================================ */
-export default function AuditTrailPage({ auth: authProp, onSignOut }) {
+export default function AuditTrailPage({ auth: authProp, token, onSignOut }) {
   const { toasts, pushToast, dismiss } = useToasts();
   const { auth, usingDemoAuth, now, setDemoAuth, handleSignOut, role } = useAdminAuth(authProp, onSignOut, pushToast);
 
-  const [entries] = useState(seedEntries);
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [action, setAction] = useState("all");
+
+  const load = () => {
+    if (!token) return;
+    setLoading(true);
+    setError("");
+    listAuditEntries(token)
+      .then(data => setEntries(data ?? []))
+      .catch(err => setError(err instanceof ApiError ? err.message : "Could not load audit entries."))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [token]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return entries.filter(e => {
-      const matchesQ = !q || e.target.toLowerCase().includes(q) || e.actor.toLowerCase().includes(q) || e.detail.toLowerCase().includes(q);
+      const matchesQ = !q || (e.target || "").toLowerCase().includes(q) || (e.actor || "").toLowerCase().includes(q) || (e.detail || "").toLowerCase().includes(q);
       const matchesAction = action === "all" || e.action === action;
       return matchesQ && matchesAction;
     });
@@ -110,17 +110,35 @@ export default function AuditTrailPage({ auth: authProp, onSignOut }) {
 
           <div style={{ maxWidth: 1320, margin: "0 auto", padding: "24px 28px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-              <div style={{ position: "relative", flex: 1, minWidth: 220, maxWidth: 320 }}>
-                <Icon name="search" size={15} color={COLORS.grey} style={{ position: "absolute", left: 10, top: 10 }} />
-                <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search actor, target, detail…" style={{ ...inputStyle, paddingLeft: 32 }} />
+              <div style={{ fontFamily: FONT, fontSize: 12.5, color: COLORS.grey, maxWidth: 560 }}>
+                Only refund approvals/rejections write real entries so far — KB edits, logins, and
+                escalations aren't wired up to log here yet.
               </div>
-              <select value={action} onChange={e => setAction(e.target.value)} style={{ ...inputStyle, width: "auto" }}>
-                <option value="all">All actions</option>
-                {Object.entries(ACTION_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
-              </select>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <button onClick={load} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 8, padding: "7px 12px", fontFamily: FONT, fontSize: 12.5, cursor: loading ? "default" : "pointer" }}>
+                  <Icon name="refreshCw" size={13} /> Refresh
+                </button>
+                <div style={{ position: "relative", minWidth: 220, maxWidth: 320 }}>
+                  <Icon name="search" size={15} color={COLORS.grey} style={{ position: "absolute", left: 10, top: 10 }} />
+                  <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search actor, target, detail…" style={{ ...inputStyle, paddingLeft: 32 }} />
+                </div>
+                <select value={action} onChange={e => setAction(e.target.value)} style={{ ...inputStyle, width: "auto" }}>
+                  <option value="all">All actions</option>
+                  {Object.entries(ACTION_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
+                </select>
+              </div>
             </div>
 
-            {filtered.length === 0 ? (
+            {error && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: "rgba(239,83,80,0.08)", border: `1px solid ${COLORS.red}`, borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
+                <div style={{ fontFamily: FONT, fontSize: 13, color: COLORS.white }}>{error}</div>
+                <button onClick={load} style={{ background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.white, borderRadius: 8, padding: "6px 12px", fontFamily: FONT, fontSize: 12, cursor: "pointer", flexShrink: 0 }}>Retry</button>
+              </div>
+            )}
+
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "70px 0", color: COLORS.grey, fontFamily: FONT }}>Loading audit entries…</div>
+            ) : filtered.length === 0 ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "70px 0", border: `1px dashed ${COLORS.line}`, borderRadius: 16 }}>
                 <Icon name="shield" size={26} color={COLORS.greyDim} />
                 <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15 }}>No audit entries match these filters.</div>
@@ -141,7 +159,7 @@ export default function AuditTrailPage({ auth: authProp, onSignOut }) {
                       </div>
                       <div style={{ fontFamily: FONT, fontSize: 11.5, color: COLORS.greyDim, minWidth: 150, textAlign: "right" }}>
                         <div>{e.actor}</div>
-                        <div>{e.timestamp}</div>
+                        <div>{formatDate(e.createdAt)}</div>
                       </div>
                     </div>
                   );

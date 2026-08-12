@@ -1,51 +1,33 @@
-import React, { useState, useMemo, Fragment } from "react";
+import React, { useState, useEffect, useMemo, Fragment } from "react";
 import {
   COLORS, FONT, Icon, DemoLoginPanel, AdminPageHeader, useAdminAuth, useToasts, Toasts,
   Modal, fieldLabel, inputStyle, StatChip, StatDivider, AdminOnlyGate, money,
 } from "./admin-shared.jsx";
+import { listRefunds, approveRefund, rejectRefund, ApiError } from "../../lib/api.js";
 
 /* ============================================================
    Epic H — Refund Approvals (human-in-the-loop, over-limit guard)
    ------------------------------------------------------------
-   Scoped to just this epic on purpose, same as pages/products/catalog.jsx:
-     - No app shell / router / nav here — a page component, meant to be
-       routed to from a shared App.jsx once the frontend project is
-       scaffolded.
-     - Auth is NOT reimplemented here. Accepts the logged-in user via the
-       `auth` prop: auth = { displayName, role: "AGENT"|"ADMIN", expiresAt }
-       and calls `onSignOut()` on sign-out. Falls back to a local demo
-       login (admin-only) so this page works standalone in `npm run dev`
-       before Epic A is wired in. Delete the fallback once real auth exists.
-     - Admin-only: there is no agent-facing view of this page (story A2).
-
-   Story H5 — the AI assistant can PROPOSE a refund, but anything at or
-   above the auto-approve limit must stop and wait for an explicit human
-   decision before the tool actually executes. This page is that human
-   checkpoint: every request below the limit still needs a click, and
-   every request at/above the limit is flagged and additionally requires
-   the admin to type a short justification before Approve is enabled.
-
-   Backend contract (Spring):
-     GET   /api/refunds?status=&overLimit=
+   Wired to the real backend now:
+     GET   /api/refunds
      POST  /api/refunds/{id}/approve   body: {note?}
      POST  /api/refunds/{id}/reject    body: {note}   (note required)
-   Every approve/reject here should also produce an Audit Trail entry
-   (Epic K) — that write happens server-side once real endpoints exist;
-   this page does not talk to the audit page directly (pages stay
-   independent per this project's convention, see catalog.jsx).
-   MOCK_MODE seeds local data so this page runs without a backend.
+   The over-limit justification rule (story H5) and the audit-trail write
+   on every decision are enforced server-side — see RefundController /
+   RefundServiceImpl. This page just renders what the backend returns and
+   surfaces whatever error it sends back (already-decided, missing note,
+   etc.) as a toast instead of assuming the decision always succeeds.
    ============================================================ */
 
 const AUTO_APPROVE_LIMIT = 200;
 
-function seedRequests() {
-  return [
-    { id: "RF-1001", orderId: "ORD-58291", customer: "Nadia Fathy", amount: 42.5, reason: "Item arrived damaged", requestedBy: "AI Assistant", requestedAt: "2026-08-03 14:12", status: "pending", note: "" },
-    { id: "RF-1002", orderId: "ORD-58305", customer: "Omar Adel", amount: 315.0, reason: "Order never delivered — carrier lost package", requestedBy: "AI Assistant", requestedAt: "2026-08-03 16:40", status: "pending", note: "" },
-    { id: "RF-1003", orderId: "ORD-58260", customer: "Lina Sabry", amount: 18.99, reason: "Duplicate charge", requestedBy: "AI Assistant", requestedAt: "2026-08-02 09:05", status: "approved", note: "Confirmed duplicate in billing system." },
-    { id: "RF-1004", orderId: "ORD-58198", customer: "Youssef Amin", amount: 610.0, reason: "Customer cancelled within window, high-value electronics", requestedBy: "AI Assistant", requestedAt: "2026-08-01 11:22", status: "rejected", note: "Cancellation window had already closed; escalated to billing instead." },
-    { id: "RF-1005", orderId: "ORD-58312", customer: "Mona Kamal", amount: 75.25, reason: "Wrong item shipped", requestedBy: "AI Assistant", requestedAt: "2026-08-04 08:50", status: "pending", note: "" },
-  ];
+function formatDate(iso) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return iso;
+  }
 }
 
 function RequestDetail({ request }) {
@@ -54,11 +36,11 @@ function RequestDetail({ request }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT, fontSize: 13 }}>
         <span style={{ color: COLORS.grey }}>Order</span>
-        <span style={{ color: COLORS.white, fontWeight: 600 }}>{request.orderId}</span>
+        <span style={{ color: COLORS.white, fontWeight: 600 }}>{request.orderNumber}</span>
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT, fontSize: 13 }}>
         <span style={{ color: COLORS.grey }}>Customer</span>
-        <span style={{ color: COLORS.white, fontWeight: 600 }}>{request.customer}</span>
+        <span style={{ color: COLORS.white, fontWeight: 600 }}>{request.customerName}</span>
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT, fontSize: 13 }}>
         <span style={{ color: COLORS.grey }}>Amount</span>
@@ -80,7 +62,7 @@ function RequestDetail({ request }) {
   );
 }
 
-function DecisionForm({ request, mode, onSubmit, onCancel }) {
+function DecisionForm({ request, mode, submitting, onSubmit, onCancel }) {
   const overLimit = request.amount >= AUTO_APPROVE_LIMIT;
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
@@ -98,16 +80,16 @@ function DecisionForm({ request, mode, onSubmit, onCancel }) {
       <div>
         {fieldLabel(mode === "reject" ? "Reason for rejection (required)" : overLimit ? "Justification (required — over limit)" : "Note (optional)")}
         <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical", fontFamily: FONT }} value={note} onChange={e => setNote(e.target.value)}
-          placeholder={mode === "reject" ? "e.g. Return window had already closed…" : "e.g. Verified with carrier — package confirmed lost…"} />
+          placeholder={mode === "reject" ? "e.g. Return window had already closed…" : "e.g. Verified with carrier — package confirmed lost…"} disabled={submitting} />
       </div>
       {err && <div style={{ fontSize: 12.5, color: COLORS.red, fontFamily: FONT }}>{err}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-        <button onClick={onCancel} style={{ flex: 1, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 9, padding: "10px 0", fontFamily: FONT, fontSize: 13.5, cursor: "pointer" }}>Cancel</button>
-        <button onClick={submit} style={{
-          flex: 1, border: "none", borderRadius: 9, padding: "10px 0", fontFamily: FONT, fontWeight: 600, fontSize: 13.5, cursor: "pointer",
+        <button onClick={onCancel} disabled={submitting} style={{ flex: 1, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 9, padding: "10px 0", fontFamily: FONT, fontSize: 13.5, cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.6 : 1 }}>Cancel</button>
+        <button onClick={submit} disabled={submitting} style={{
+          flex: 1, border: "none", borderRadius: 9, padding: "10px 0", fontFamily: FONT, fontWeight: 600, fontSize: 13.5, cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1,
           background: mode === "reject" ? COLORS.red : COLORS.green, color: mode === "reject" ? COLORS.white : COLORS.ink,
         }}>
-          {mode === "reject" ? "Reject request" : "Approve refund"}
+          {submitting ? "Submitting…" : mode === "reject" ? "Reject request" : "Approve refund"}
         </button>
       </div>
     </div>
@@ -118,15 +100,32 @@ function DecisionForm({ request, mode, onSubmit, onCancel }) {
    Default export — the actual page.
    Props:
      auth      — { displayName, role: "AGENT"|"ADMIN", expiresAt } | null
+     token     — bearer token, forwarded by withAdminAuth, used to call the
+                 real /api/refunds endpoints below.
      onSignOut — called when the user clicks "Sign out".
    ============================================================ */
-export default function RefundApprovalsPage({ auth: authProp, onSignOut }) {
+export default function RefundApprovalsPage({ auth: authProp, token, onSignOut }) {
   const { toasts, pushToast, dismiss } = useToasts();
   const { auth, usingDemoAuth, now, setDemoAuth, handleSignOut, role } = useAdminAuth(authProp, onSignOut, pushToast);
 
-  const [requests, setRequests] = useState(seedRequests);
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [modal, setModal] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = () => {
+    if (!token) return;
+    setLoading(true);
+    setError("");
+    listRefunds(token)
+      .then(data => setRequests(data ?? []))
+      .catch(err => setError(err instanceof ApiError ? err.message : "Could not load refund requests."))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [token]);
 
   const filtered = useMemo(() => {
     if (statusFilter === "all") return requests;
@@ -143,15 +142,23 @@ export default function RefundApprovalsPage({ auth: authProp, onSignOut }) {
     };
   }, [requests]);
 
-  const decide = (id, decision, note) => {
-    const r = requests.find(x => x.id === id);
-    setRequests(list => list.map(x => x.id === id ? { ...x, status: decision, note } : x));
-    setModal(null);
-    if (decision === "approved") {
-      pushToast(`Approved ${money(r.amount)} refund for ${r.customer} (${r.id}).`);
-    } else {
-      pushToast(`Rejected refund ${r.id} for ${r.customer}.`, "error");
-    }
+  const decide = (id, mode, note) => {
+    setSubmitting(true);
+    const call = mode === "reject" ? rejectRefund(token, id, note) : approveRefund(token, id, note);
+    call
+      .then(updated => {
+        setRequests(list => list.map(x => x.id === id ? updated : x));
+        setModal(null);
+        if (mode === "approve") {
+          pushToast(`Approved ${money(updated.amount)} refund for ${updated.customerName} (${updated.code}).`);
+        } else {
+          pushToast(`Rejected refund ${updated.code} for ${updated.customerName}.`, "error");
+        }
+      })
+      .catch(err => {
+        pushToast(err instanceof ApiError ? err.message : "Could not save that decision.", "error");
+      })
+      .finally(() => setSubmitting(false));
   };
 
   return (
@@ -182,15 +189,29 @@ export default function RefundApprovalsPage({ auth: authProp, onSignOut }) {
               <div style={{ fontFamily: FONT, fontSize: 13, color: COLORS.grey }}>
                 Requests at or above <span style={{ color: COLORS.yellow, fontWeight: 700 }}>{money(AUTO_APPROVE_LIMIT)}</span> require a written justification (story H5).
               </div>
-              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inputStyle, width: "auto" }}>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-                <option value="all">All</option>
-              </select>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button onClick={load} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 8, padding: "7px 12px", fontFamily: FONT, fontSize: 12.5, cursor: loading ? "default" : "pointer" }}>
+                  <Icon name="refreshCw" size={13} /> Refresh
+                </button>
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inputStyle, width: "auto" }}>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="all">All</option>
+                </select>
+              </div>
             </div>
 
-            {filtered.length === 0 ? (
+            {error && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: "rgba(239,83,80,0.08)", border: `1px solid ${COLORS.red}`, borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
+                <div style={{ fontFamily: FONT, fontSize: 13, color: COLORS.white }}>{error}</div>
+                <button onClick={load} style={{ background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.white, borderRadius: 8, padding: "6px 12px", fontFamily: FONT, fontSize: 12, cursor: "pointer", flexShrink: 0 }}>Retry</button>
+              </div>
+            )}
+
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "70px 0", color: COLORS.grey, fontFamily: FONT }}>Loading refund requests…</div>
+            ) : filtered.length === 0 ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "70px 0", border: `1px dashed ${COLORS.line}`, borderRadius: 16 }}>
                 <Icon name="creditCard" size={26} color={COLORS.greyDim} />
                 <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15 }}>No refund requests match this filter.</div>
@@ -204,16 +225,21 @@ export default function RefundApprovalsPage({ auth: authProp, onSignOut }) {
                       <Icon name="creditCard" size={18} color={COLORS.grey} />
                       <div style={{ flex: 1, minWidth: 220 }}>
                         <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14.5, color: COLORS.white, display: "flex", alignItems: "center", gap: 8 }}>
-                          {r.id} <span style={{ color: COLORS.grey, fontWeight: 400 }}>· {r.customer}</span>
+                          {r.code} <span style={{ color: COLORS.grey, fontWeight: 400 }}>· {r.customerName}</span>
                           {overLimit && <Icon name="alertTriangle" size={13} color={COLORS.yellow} />}
                         </div>
-                        <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.grey, marginTop: 3 }}>{r.orderId} · {r.reason}</div>
+                        <div style={{ fontFamily: FONT, fontSize: 12, color: COLORS.grey, marginTop: 3 }}>{r.orderNumber} · {r.reason}</div>
+                        {r.status !== "pending" && r.decidedBy && (
+                          <div style={{ fontFamily: FONT, fontSize: 11, color: COLORS.greyDim, marginTop: 3 }}>
+                            Decided by {r.decidedBy}{r.note ? ` — "${r.note}"` : ""}
+                          </div>
+                        )}
                       </div>
                       <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: overLimit ? COLORS.yellow : COLORS.white, minWidth: 90, textAlign: "right" }}>
                         {money(r.amount)}
                       </div>
                       <div style={{ fontFamily: FONT, fontSize: 11.5, color: COLORS.greyDim, minWidth: 130 }}>
-                        {r.requestedBy} · {r.requestedAt}
+                        {r.requestedBy} · {formatDate(r.requestedAt)}
                       </div>
                       {r.status === "pending" ? (
                         <div style={{ display: "flex", gap: 8 }}>
@@ -237,13 +263,14 @@ export default function RefundApprovalsPage({ auth: authProp, onSignOut }) {
           </div>
 
           {modal && (
-            <Modal title={modal.mode === "reject" ? "Reject refund request" : "Approve refund request"} onClose={() => setModal(null)}>
+            <Modal title={modal.mode === "reject" ? "Reject refund request" : "Approve refund request"} onClose={() => !submitting && setModal(null)}>
               <RequestDetail request={modal.request} />
               <DecisionForm
                 request={modal.request}
                 mode={modal.mode}
+                submitting={submitting}
                 onCancel={() => setModal(null)}
-                onSubmit={(note) => decide(modal.request.id, modal.mode === "reject" ? "rejected" : "approved", note)}
+                onSubmit={(note) => decide(modal.request.id, modal.mode, note)}
               />
             </Modal>
           )}

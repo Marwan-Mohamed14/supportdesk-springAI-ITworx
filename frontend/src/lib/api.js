@@ -112,6 +112,31 @@ export const escalateTicket = (token, id, reason) =>
 export const closeTicket = (token, id) =>
     request(`/tickets/${id}/close`, { method: 'POST', token });
 
+/* ---------------- Metrics — /api/metrics (ADMIN only) ---------------- */
+// GET /api/metrics/summary -> { ticketsOpen, ticketsResolvedToday, avgResolutionMins, escalationRate }
+export const getMetricsSummary = (token) => request('/api/metrics/summary', { token });
+
+/* ---------------- Knowledge Base — /api/kb/articles (ADMIN only) ---------------- */
+export const listKbArticles = (token) => request('/api/kb/articles', { token });
+export const createKbArticle = (token, body) => request('/api/kb/articles', { method: 'POST', body, token });
+export const updateKbArticle = (token, id, body) => request(`/api/kb/articles/${id}`, { method: 'PUT', body, token });
+export const ingestKbArticle = (token, id) => request(`/api/kb/articles/${id}/ingest`, { method: 'POST', token });
+export const ingestAllKbArticles = (token) => request('/api/kb/articles/ingest-all', { method: 'POST', token });
+
+/* ---------------- Refunds — /api/refunds (ADMIN only) ---------------- */
+export const listRefunds = (token) => request('/api/refunds', { token });
+export const approveRefund = (token, id, note) =>
+    request(`/api/refunds/${id}/approve`, { method: 'POST', body: { note: note ?? '' }, token });
+export const rejectRefund = (token, id, note) =>
+    request(`/api/refunds/${id}/reject`, { method: 'POST', body: { note: note ?? '' }, token });
+
+/* ---------------- Audit Trail — /api/audit (ADMIN only) ---------------- */
+// GET /api/audit?q=&action=&actor=&from=&to= — all params optional; the page
+// currently fetches everything and filters client-side, but the backend
+// supports server-side filtering too if that's ever needed.
+export const listAuditEntries = (token, { q, action, actor, from, to } = {}) =>
+    request(`/api/audit${toQueryString({ q, action, actor, from, to })}`, { token });
+
 /* ---------------- Chatbot (RAG) — /api/notes ---------------- */
 // POST /api/notes/ask  body: {question} -> returns a plain-text answer (not JSON),
 // so this bypasses request()'s JSON-response handling.

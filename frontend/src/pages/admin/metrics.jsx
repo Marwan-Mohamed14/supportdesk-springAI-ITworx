@@ -1,8 +1,9 @@
-import React, { Fragment } from "react";
+import React, { Fragment, useCallback, useEffect, useState } from "react";
 import {
   COLORS, FONT, Icon, DemoLoginPanel, AdminPageHeader, useAdminAuth, useToasts, Toasts,
   StatChip, StatDivider, AdminOnlyGate,
 } from "./admin-shared.jsx";
+import { getMetricsSummary } from "../../lib/api.js";
 
 /* ============================================================
    Epic L — Operational Metrics
@@ -18,66 +19,34 @@ import {
        before Epic A is wired in. Delete the fallback once real auth exists.
      - Admin-only: there is no agent-facing view of this page (story A2).
 
-   Story L2 — surface enough operational signal (ticket volume by
-   category, tool-call volume by type, resolution time, escalation rate)
-   for an admin to spot trouble without digging through raw logs. This
-   page is read-only, like the audit trail.
+   Story L2 — surface enough operational signal for an admin to spot
+   trouble without digging through raw logs. This page is read-only,
+   like the audit trail.
 
-   Bars are direct-labeled (name + count printed next to each bar) rather
-   than relying on a legend or color alone to identify a category — the
-   brand palette here is fixed for consistency, not chosen for charting,
-   so color can't be the only way to tell categories apart.
+   Backed by the real backend: GET /api/metrics/summary (ADMIN only,
+   see SecurityConfig). `token` is supplied by withAdminAuth alongside
+   `auth` — the demo login fallback above has no real token, so it
+   shows an explanatory message instead of a confusing fetch failure.
 
-   Backend contract (Spring):
-     GET /api/metrics/summary?from=&to=
-       -> { ticketsOpen, ticketsResolvedToday, avgResolutionMins,
-            escalationRate, ticketsByCategory: [{label,count}],
-            toolCallsByType: [{label,count}] }
-   MOCK_MODE seeds local data so this page runs without a backend.
+   Only ticketsOpen / ticketsResolvedToday / avgResolutionMins /
+   escalationRate are real — see MetricsService for exactly how each is
+   computed from the tickets table. "Tickets by category" and "tool-call
+   volume by type" from the original mockup are NOT shown as numbers:
+   tickets have no category field, and no tool-call is logged anywhere
+   in the backend, so there is nothing real to show yet. Below is an
+   honest placeholder instead of invented data — swap it out once a
+   category field + tool-call logging exist server-side.
    ============================================================ */
 
-const TICKETS_BY_CATEGORY = [
-  { label: "Shipping delay", count: 132, color: COLORS.blue },
-  { label: "Refund request", count: 98, color: COLORS.red },
-  { label: "Account access", count: 74, color: COLORS.green },
-  { label: "Product defect", count: 51, color: COLORS.yellow },
-  { label: "Billing question", count: 39, color: COLORS.grey },
-];
-
-const TOOL_CALLS_BY_TYPE = [
-  { label: "kb_search", count: 410, color: COLORS.blue },
-  { label: "order_lookup", count: 265, color: COLORS.green },
-  { label: "refund_propose", count: 87, color: COLORS.red },
-  { label: "ticket_escalate", count: 33, color: COLORS.yellow },
-];
-
-const SUMMARY = {
-  ticketsOpen: 46,
-  ticketsResolvedToday: 61,
-  avgResolutionMins: 14.2,
-  escalationRate: 7.8,
-};
-
-function BarList({ title, icon, data }) {
-  const max = Math.max(...data.map(d => d.count), 1);
+function NotAvailableCard({ title, icon, reason }) {
   return (
-    <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 20, flex: 1, minWidth: 320 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
-        <Icon name={icon} size={16} color={COLORS.grey} />
+    <div style={{ background: COLORS.panel, border: `1px dashed ${COLORS.line}`, borderRadius: 16, padding: 20, flex: 1, minWidth: 320 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <Icon name={icon} size={16} color={COLORS.greyDim} />
         <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14 }}>{title}</div>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {data.map(d => (
-          <div key={d.label}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, fontFamily: FONT, fontSize: 12.5 }}>
-              <span style={{ color: COLORS.white, fontWeight: 600 }}>{d.label}</span>
-              <span style={{ color: COLORS.grey, fontVariantNumeric: "tabular-nums" }}>{d.count}</span>
-            </div>
-            <div style={{ height: 8, borderRadius: 5, background: COLORS.ink, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${(d.count / max) * 100}%`, background: d.color, borderRadius: 5 }} />
-            </div>
-          </div>
-        ))}
+      <div style={{ fontFamily: FONT, fontSize: 12.5, color: COLORS.greyDim, lineHeight: 1.5 }}>
+        Not available yet — {reason}
       </div>
     </div>
   );
@@ -88,10 +57,40 @@ function BarList({ title, icon, data }) {
    Props:
      auth      — { displayName, role: "AGENT"|"ADMIN", expiresAt } | null
      onSignOut — called when the user clicks "Sign out".
+     token     — real JWT, supplied by withAdminAuth; absent when using
+                 the demo-login fallback below.
    ============================================================ */
-export default function MetricsPage({ auth: authProp, onSignOut }) {
+export default function MetricsPage({ auth: authProp, onSignOut, token }) {
   const { toasts, pushToast, dismiss } = useToasts();
   const { auth, usingDemoAuth, now, setDemoAuth, handleSignOut, role } = useAdminAuth(authProp, onSignOut, pushToast);
+
+  const [summary, setSummary] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!token) {
+      setSummary(null);
+      setError("This demo login has no real backend session — sign in through the actual app to see live metrics.");
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await getMetricsSummary(token);
+      setSummary(data);
+      setError(null);
+    } catch (err) {
+      setSummary(null);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (auth && role === "ADMIN") load();
+  }, [auth, role, load]);
 
   return (
     <div style={{ minHeight: "100vh", background: COLORS.ink, color: COLORS.white, fontFamily: FONT }}>
@@ -108,17 +107,43 @@ export default function MetricsPage({ auth: authProp, onSignOut }) {
       ) : (
         <Fragment>
           <div style={{ borderBottom: `1px solid ${COLORS.line}`, padding: "16px 28px", overflowX: "auto" }}>
-            <div style={{ display: "flex", maxWidth: 1320, margin: "0 auto" }}>
-              <StatChip label="Open tickets" value={SUMMARY.ticketsOpen} />
-              <StatDivider /><StatChip label="Resolved today" value={SUMMARY.ticketsResolvedToday} color={COLORS.green} />
-              <StatDivider /><StatChip label="Avg resolution (min)" value={SUMMARY.avgResolutionMins} />
-              <StatDivider /><StatChip label="Escalation rate" value={`${SUMMARY.escalationRate}%`} color={COLORS.yellow} />
+            <div style={{ display: "flex", maxWidth: 1320, margin: "0 auto", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+              <div style={{ display: "flex" }}>
+                <StatChip label="Open tickets" value={loading ? "…" : summary ? summary.ticketsOpen : "—"} />
+                <StatDivider /><StatChip label="Resolved today" value={loading ? "…" : summary ? summary.ticketsResolvedToday : "—"} color={COLORS.green} />
+                <StatDivider /><StatChip label="Avg resolution (min)" value={loading ? "…" : summary?.avgResolutionMins != null ? summary.avgResolutionMins : (summary ? "n/a — no closed tickets" : "—")} />
+                <StatDivider /><StatChip label="Escalation rate" value={loading ? "…" : summary ? `${summary.escalationRate}%` : "—"} color={COLORS.yellow} />
+              </div>
+              <button onClick={load} disabled={loading || !token} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.grey, borderRadius: 9, padding: "8px 14px", fontFamily: FONT, fontSize: 12.5, cursor: loading || !token ? "default" : "pointer", opacity: loading || !token ? 0.6 : 1 }}>
+                <Icon name="refreshCw" size={13} /> {loading ? "Refreshing…" : "Refresh"}
+              </button>
             </div>
           </div>
 
+          {error && (
+            <div style={{ maxWidth: 1320, margin: "16px auto 0", padding: "0 28px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: "rgba(198,53,39,0.1)", border: `1px solid ${COLORS.red}`, borderRadius: 12, padding: "12px 16px", fontFamily: FONT, fontSize: 13 }}>
+                <span>{token ? `Couldn't load metrics — ${error}` : error}</span>
+                {token && (
+                  <button onClick={load} style={{ background: "none", border: `1px solid ${COLORS.line}`, color: COLORS.white, borderRadius: 8, padding: "6px 12px", fontFamily: FONT, fontSize: 12, cursor: "pointer" }}>
+                    Retry
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div style={{ maxWidth: 1320, margin: "0 auto", padding: "24px 28px", display: "flex", gap: 20, flexWrap: "wrap" }}>
-            <BarList title="Tickets by category (last 30 days)" icon="barChart" data={TICKETS_BY_CATEGORY} />
-            <BarList title="Tool-call volume by type (last 30 days)" icon="shield" data={TOOL_CALLS_BY_TYPE} />
+            <NotAvailableCard
+              title="Tickets by category"
+              icon="barChart"
+              reason="tickets don't have a category field in the database yet. Needs a backend schema change (add a category column to tickets) before this can be real."
+            />
+            <NotAvailableCard
+              title="Tool-call volume by type"
+              icon="shield"
+              reason="no tool call the AI assistant makes is logged anywhere in the backend yet. Needs a tool-call log table plus instrumentation in the chatbot's tool layer before this can be real."
+            />
           </div>
         </Fragment>
       )}

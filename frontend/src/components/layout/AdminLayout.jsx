@@ -27,6 +27,7 @@ const TABS = [
   { to: "/admin/kb", label: "Knowledge Base" },
   { to: "/admin/refunds", label: "Refunds" },
   { to: "/admin/audit", label: "Audit Trail" },
+  { to: "/admin/health", label: "Health" },
 ];
 
 export default function AdminLayout() {
