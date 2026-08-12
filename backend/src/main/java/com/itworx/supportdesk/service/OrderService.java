@@ -19,6 +19,8 @@ import com.itworx.supportdesk.model.order.OrderStatus;
 import com.itworx.supportdesk.repository.OrderRepository;
 import com.itworx.supportdesk.repository.ProductRepository;
 import com.itworx.supportdesk.repository.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,18 @@ public class OrderService {
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
         this.productRepository = productRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OrderResponse> list(String status, Pageable pageable) {
+        Page<Order> orders;
+        if (status != null && !status.isBlank()) {
+            OrderStatus parsedStatus = OrderStatus.valueOf(status.trim().toUpperCase());
+            orders = orderRepository.findByStatus(parsedStatus, pageable);
+        } else {
+            orders = orderRepository.findAll(pageable);
+        }
+        return orders.map(this::mapToOrderResponse);
     }
 
     @Transactional(readOnly = true)

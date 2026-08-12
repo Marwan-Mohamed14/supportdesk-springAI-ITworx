@@ -76,6 +76,10 @@ export const updateProduct = (token, id, body) => request(`/api/products/${id}`,
 export const updateProductStock = (token, id, body) => request(`/api/products/${id}/stock`, { method: 'PATCH', body, token });
 
 /* ---------------- Orders — /api/orders ---------------- */
+// GET /api/orders?status=&page=&size= — staff only (AGENT/ADMIN); returns a PageResponse
+export const listOrders = (token, { status, page = 0, size = 20 } = {}) =>
+    request(`/api/orders${toQueryString({ status, page, size })}`, { token });
+
 // POST /api/orders  body: {userId, items: [{productId, quantity}]}
 export const createOrder = (token, body) => request('/api/orders', { method: 'POST', body, token });
 

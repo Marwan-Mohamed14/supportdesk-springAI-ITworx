@@ -16,6 +16,14 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     Page<Ticket> findByStatus(TicketStatus status, Pageable pageable);
     Page<Ticket> findByPriority(TicketPriority priority, Pageable pageable);
 
+    // Customer-scoped equivalents of the three above, used to restrict a
+    // non-staff caller's ticket list to their own tickets only (see
+    // TicketService#ListAndFilter).
+    Page<Ticket> findByCustomerIdAndStatusAndPriority(UUID customerId, TicketStatus status, TicketPriority priority, Pageable pageable);
+    Page<Ticket> findByCustomerIdAndStatus(UUID customerId, TicketStatus status, Pageable pageable);
+    Page<Ticket> findByCustomerIdAndPriority(UUID customerId, TicketPriority priority, Pageable pageable);
+    Page<Ticket> findByCustomerId(UUID customerId, Pageable pageable);
+
     // Used to find the least-loaded agent when auto-assigning a chat-escalated
     // ticket (see TicketService#createTicketFromChatAndAssign).
     long countByAssignedAgentAndStatusIn(User assignedAgent, List<TicketStatus> statuses);
