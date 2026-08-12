@@ -102,6 +102,14 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
 
+                        // Staff-only: order list (exact path only - "/api/orders/{id}" must
+                        // stay open to any authenticated user, including customers looking
+                        // up their own order, via the anyRequest().authenticated() catch-all)
+                        .requestMatchers(HttpMethod.GET, "/api/orders").hasAnyRole("AGENT", "ADMIN")
+
+                        // Staff-only: user list (only used to populate the ticket-assignment picker)
+                        .requestMatchers(HttpMethod.GET, "/users").hasAnyRole("AGENT", "ADMIN")
+
                         // Admin-only: catalog writes (B1, B3, B4)
                         .requestMatchers(HttpMethod.POST, "/api/products").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("ADMIN")

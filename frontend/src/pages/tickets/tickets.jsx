@@ -126,8 +126,8 @@ export default function TicketsPage() {
         const s = search.trim().toLowerCase();
         if (!s) return tickets;
         return tickets.filter((t) =>
-            t.ticketNumber.toLowerCase().includes(s) ||
-            t.title.toLowerCase().includes(s) ||
+            (t.ticketNumber || "").toLowerCase().includes(s) ||
+            (t.title || "").toLowerCase().includes(s) ||
             (t.description || "").toLowerCase().includes(s)
         );
     }, [tickets, search]);
@@ -326,7 +326,7 @@ export default function TicketsPage() {
                                         {t.orderId && <span>Order: {t.orderId.slice(0, 8)}…</span>}
                                     </div>
                                     {err && <div style={{ color: "#E2685C", fontSize: 12, marginTop: 8 }}>{err}</div>}
-                                    {t.id && (
+                                    {t.id && (role === "AGENT" || role === "ADMIN") && (
                                         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                                             <button
                                                 style={{ ...smallBtn(COLORS.blue), opacity: canAssign ? 1 : 0.5, cursor: canAssign ? "pointer" : "not-allowed" }}

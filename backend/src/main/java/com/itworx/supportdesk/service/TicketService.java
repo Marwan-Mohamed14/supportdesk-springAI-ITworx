@@ -19,6 +19,8 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -98,15 +100,36 @@ public class TicketService {
     }
 
     public Page<TicketResponse> ListAndFilter(TicketStatus status, TicketPriority priority, Pageable pageable) {
+        boolean isStaff = SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(authority -> authority.equals("ROLE_AGENT") || authority.equals("ROLE_ADMIN"));
+
         Page<Ticket> tickets;
-        if (status != null && priority != null) {
-            tickets = ticketRepository.findByStatusAndPriority(status, priority, pageable);
-        } else if (status != null) {
-            tickets = ticketRepository.findByStatus(status, pageable);
-        } else if (priority != null) {
-            tickets = ticketRepository.findByPriority(priority, pageable);
+        if (isStaff) {
+            if (status != null && priority != null) {
+                tickets = ticketRepository.findByStatusAndPriority(status, priority, pageable);
+            } else if (status != null) {
+                tickets = ticketRepository.findByStatus(status, pageable);
+            } else if (priority != null) {
+                tickets = ticketRepository.findByPriority(priority, pageable);
+            } else {
+                tickets = ticketRepository.findAll(pageable);
+            }
         } else {
-            tickets = ticketRepository.findAll(pageable);
+            String email = SecurityContextHolder.getContext().getAuthentication().getName();
+            User customer = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new EntityNotFoundException("Customer not found"));
+            UUID customerId = customer.getId();
+
+            if (status != null && priority != null) {
+                tickets = ticketRepository.findByCustomerIdAndStatusAndPriority(customerId, status, priority, pageable);
+            } else if (status != null) {
+                tickets = ticketRepository.findByCustomerIdAndStatus(customerId, status, pageable);
+            } else if (priority != null) {
+                tickets = ticketRepository.findByCustomerIdAndPriority(customerId, priority, pageable);
+            } else {
+                tickets = ticketRepository.findByCustomerId(customerId, pageable);
+            }
         }
         return tickets.map(TicketResponse::from);
     }

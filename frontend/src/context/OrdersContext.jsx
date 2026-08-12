@@ -3,19 +3,21 @@ import { useAuth } from './AuthContext.jsx';
 import * as api from '../lib/api.js';
 
 /* ============================================================
-   Orders, backed entirely by the real backend — with one real
-   constraint: OrderController has no "list orders" endpoint at
-   all (only create / getById / updateStatus), and OrderService
-   never scopes getOrderById to the caller. So there is no way to
-   ask the backend "what are my orders" — only "here is order X"
-   for an id you already have.
+   Orders, backed entirely by the real backend.
 
-   Workaround (not fabricated data — every field shown still comes
-   straight from GET /api/orders/{id}): remember which order ids
-   this browser has created or looked up, per signed-in user, in
-   localStorage, and hydrate each one live from the backend. A
-   "look up by id" affordance in the UI lets a user pull in an
-   order this browser doesn't already know about.
+   GET /api/orders (a real, paginated, global list) exists but is
+   staff-only (AGENT/ADMIN) - a CUSTOMER session gets a 403 from it.
+   OrderService also never scopes getOrderById to the caller, so
+   there's still no "what are my orders" query for a customer -
+   only "here is order X" for an id they already have.
+
+   So: staff hydrate straight from GET /api/orders. Customers keep
+   the old workaround (not fabricated data - every field shown
+   still comes straight from GET /api/orders/{id}): remember which
+   order ids this browser has created or looked up, per signed-in
+   user, in localStorage, and hydrate each one live from the
+   backend. The "look up by id" affordance in the UI lets either
+   role pull in an order this browser doesn't already know about.
 
    Also real: OrderService.isValidTransition only allows forward
    moves PLACED -> PAID -> SHIPPED -> DELIVERED. There is no
@@ -45,8 +47,9 @@ function writeTrackedIds(userId, ids) {
 const OrdersContext = createContext(null);
 
 export function OrdersProvider({ children }) {
-  const { token, user, isAuthenticated } = useAuth();
+  const { token, user, isAuthenticated, role } = useAuth();
   const userId = user?.userId;
+  const isStaff = role === 'AGENT' || role === 'ADMIN';
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -69,14 +72,39 @@ export function OrdersProvider({ children }) {
     }
   }, [token]);
 
+  // AGENT/ADMIN: a real list endpoint exists for staff (GET /api/orders), so
+  // hydrate directly from it instead of the per-browser tracked-ids workaround.
+  const hydrateStaff = useCallback(async () => {
+    if (!token) {
+      setOrders([]);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await api.listOrders(token);
+      setOrders(result.content);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
   useEffect(() => {
-    if (isAuthenticated && userId) {
+    if (!isAuthenticated) {
+      setOrders([]);
+      return;
+    }
+    if (isStaff) {
+      hydrateStaff();
+    } else if (userId) {
       hydrate(readTrackedIds(userId));
     } else {
       setOrders([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, userId]);
+  }, [isAuthenticated, userId, isStaff, token]);
 
   const trackId = useCallback((id) => {
     if (!userId) return;
